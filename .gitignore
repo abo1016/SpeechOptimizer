@@ -1,0 +1,16 @@
+# macOS Finder 元数据不属于项目内容，避免在不同机器间产生无关差异。
+.DS_Store
+**/.DS_Store
+
+# 前端依赖可由锁文件复现，不提交体积较大的本地安装目录。
+node_modules/
+**/node_modules/
+
+# Vite 和 Sites 构建产物由构建命令生成，不作为源码提交。
+dist/
+**/dist/
+**/.vite/
+
+# 本地包管理器调试日志可能包含机器路径，仅保留可复现的锁文件。
+npm-debug.log*
+pnpm-debug.log*
