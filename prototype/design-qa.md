@@ -2,66 +2,64 @@
 
 ## Evidence
 
-- Primary source visual truth: `design-reference.png` (`1487 x 1058` px).
-- Secondary UI reference: `reference-removebgvideo-home.png` (`1432 x 1018` px).
-- Browser-rendered implementation: `implementation-viewport-raw.png` (`1440 x 1024` px).
-- Full comparison: `comparison-final.png` (`4320 x 1064` px).
-- Focused comparison: `comparison-focused.png` (`2000 x 1500` px).
-- Route and state: `/`, anonymous Mock user, recorder ready, light theme.
-- CSS viewport: `1440 x 1024`; implementation `devicePixelRatio: 1`.
-- Normalization: the primary and secondary sources were resized to `1440 x 1024` only inside the comparison image. Original evidence files were preserved.
+- Selected visual source: `design-option-2-transcript-coach.png` (`1536 x 1024` px), option 2 confirmed on 2026-09-03.
+- Desktop implementation: `implementation-option-2-desktop.png` (`1348 x 926` px captured content; browser CSS viewport `1363 x 936`, DPR `1`).
+- Mobile implementation: `implementation-option-2-mobile.png` (`375 x 812` px frame; inner CSS content width `360` px after the browser scrollbar).
+- Route and state: `/analysis/demo-result`, mock signed-in user, player at `00:00`, no transcript evidence selected, all three priority actions visible.
+- The source and both final implementation screenshots were inspected together at original resolution. Transcript rows, priority cards, waveform labels, player controls, and the brand lockup were readable in that comparison, so no separate enlarged crop was required.
 
 ## Full-View Comparison
 
-The final composition keeps direction 1's light utility shell, two-column recorder/report hierarchy, centered primary recording control, and compact recent-session list. The selected reference site's upload hierarchy was applied through a direct upload action and three nearby constraint facts without importing its marketing hero, affiliate banner, dark purple palette, or SEO layout.
+The implementation follows the selected transcript-first composition: persistent utility header, transcript and waveform on the left, evidence-linked coaching actions on the right, and a full-width playback/practice bar at the bottom. The final comparison confirms the same light tool-first visual language, thin dividers, compact type scale, semantic red/amber/green coaching states, and SpeechOptimizer source lockup.
 
-## Focused Comparison
+The cloud browser viewport is `88px` shorter than the `1024px` source canvas. At that viewport the final transcript rows continue behind the fixed player, while the measured document height is `1013px`; therefore the complete desktop composition fits within the source's `1024px` height. There is no horizontal overflow (`scrollWidth` equals `clientWidth`, both `1348px`).
 
-`comparison-focused.png` checks the recorder hierarchy, upload action, evidence density, and constraint facts at readable size. A separate icon crop was not needed because all interface icons use `lucide-react`; the SpeechOptimizer lockup uses a source crop at `public/assets/speechoptimizer-lockup.png` rather than a code approximation.
+## Focused Fidelity Checks
 
-## Required Fidelity Surfaces
-
-- Typography: system UI sans closely matches the source's neutral grotesk style. Body text is `16px` on mobile, headings keep normal letter spacing, and long copy wraps without clipping.
-- Spacing and layout: the recorder sits above recent sessions in the left grid while the feedback panel spans both rows. This matches the primary source's information rhythm and keeps recent work visible in the first desktop viewport.
-- Colors and tokens: warm white, charcoal, electric blue, and semantic green/amber/red map to the primary source. Purple remains limited to the external reference evidence and is not imported into the product.
-- Image and asset fidelity: the selected SpeechOptimizer lockup is reused as a raster source asset. No hero imagery or decorative raster asset exists in the target product screen.
-- Copy and content: UI copy describes observable pace, filler, and pause evidence. Privacy, language, and duration constraints reflect `docs/MVP_PLAN.md` and avoid unverifiable confidence or personality claims.
+- Header: the existing `public/assets/speechoptimizer-lockup.png` is reused directly; the confirmed product name remains `SpeechOptimizer`.
+- Session context: title, recording date, duration, speaking pace, total words, blue waveform, current-time marker, and timestamps match the source anatomy.
+- Transcript: timestamped rows, filler highlighting, pause evidence, and selected-evidence behavior preserve the source hierarchy.
+- Coaching rail: three ordered, impact-labelled actions each expose a finding, evidence links, a next-take cue, and an example rewrite.
+- Player: play/pause, backward/forward 10 seconds, elapsed time, playback speed, evidence playback, section practice, and improved-take recording are present.
+- Mobile: the result page collapses to one column with no horizontal overflow. The three primary controls remain fixed and reachable at the bottom of a `375 x 812` frame.
 
 ## Interaction And Runtime Checks
 
-- Recorder: ready -> recording -> complete -> analyze.
-- Processing: upload/transcribe/analyze progress -> automatic report navigation.
-- Report: three priorities, metrics, re-record action, and comparison entry.
-- Comparison: four metric rows and next-session action.
-- Navigation: History, Pricing, Billing, Privacy, Admin, legal pages, and sign-in dialog.
-- Responsive: `375 x 812` has no horizontal overflow; recorder is `140 x 140`; upload control is `48px` high; all constraint rows remain visible.
-- Console: no warning or error logs in the tested desktop and mobile states.
+- Timeline seek and transcript evidence links update the current time and evidence focus.
+- Back/forward controls change playback position; speed cycles from `1x` to `1.25x` to `1.5x`.
+- Play/pause advances and stops the mock audio timer.
+- `Practice selected section` opens an editable coaching dialog; its 30-second practice timer starts and increments; close works on desktop and mobile.
+- `Record improved take` returns to the recorder and displays the selected next-take cue.
+- Mobile navigation exposes Coach, History, Pricing, Billing, Privacy, and Admin.
+- Application console errors: none. Browser-extension metadata messages were excluded as environment-level noise unrelated to the application.
 
 ## Comparison History
 
 ### Pass 1
 
-- Finding: `[P1]` Recent sessions appeared below both columns, while the primary source places them below the recorder and lets the feedback rail continue independently.
-- Fix: changed `.home-grid` to named grid areas with the feedback panel spanning both rows.
-- Post-fix evidence: `comparison-desktop.png` and final `comparison-final.png`; recent sessions begin at `819.47px` in the final `1440 x 1024` viewport.
+- Finding: `[P1]` The previous report used summary metric cards and did not implement the selected transcript-first workspace.
+- Fix: replaced it with the timestamped transcript, waveform, evidence-linked coaching rail, and bottom action player.
 
 ### Pass 2
 
-- Finding: `[P2]` Session rows were too tall to expose the same amount of recent history above the fold.
-- Fix: reduced desktop session rows from `68px` to `56px` and tightened their padding.
-- Post-fix evidence: `comparison-final.png`; recent records remain scannable without overflow.
+- Finding: `[P2]` Only one priority card was expanded and the desktop header consumed too much vertical space.
+- Fix: exposed all three action bodies and tightened the report heading, transcript rows, coaching cards, and player spacing.
 
 ### Pass 3
 
-- Finding: `[P2]` The code-rendered brand mark approximated the generated source lockup.
-- Fix: cropped and reused the exact source lockup as `public/assets/speechoptimizer-lockup.png`.
-- Post-fix evidence: `implementation-viewport-raw.png` and `comparison-final.png`.
+- Finding: `[P2]` The waveform lacked source-like timeline labels, the player omitted forward/speed controls, and mobile actions could fall below long content.
+- Fix: added waveform ticks and a current-time marker, backward/forward controls, playback speed, and a fixed mobile action bar.
+
+### Pass 4
+
+- Finding: `[P2]` The visible brand had been changed to `speech..`, which contradicted the user's clarification to retain the existing name.
+- Fix: restored the exact SpeechOptimizer lockup, browser title, footer label, metadata context, and QA labels.
 
 ## Remaining Differences
 
-- `P3`: the implementation screenshot shows the recorder's ready state while the primary mock shows an active recording at `00:18`. This is an expected state difference; the active state was tested separately and exposes pause and finish controls.
-- Accepted: navigation labels use MVP information architecture (`Coach`, `History`, `Pricing`) instead of the mock's exploratory labels.
-- Accepted: the external reference's dark visual system is not copied because SpeechOptimizer is a frequent-use operational tool rather than a marketing landing page.
+- Accepted: coaching titles and copy are slightly more action-oriented than the generated image (`Replace fillers with a beat`, `Tighten long pauses`, `Land the outcome earlier`). This follows the repository's product principle of prioritizing observable evidence and specific next-take cues over broad claims.
+- Accepted: the browser capture width is smaller than the generated source because the user-selected cloud browser has a fixed viewport. The responsive grid preserves the same two-column hierarchy and all source-critical surfaces remain visible.
+- Accepted: the production domain is intentionally unspecified. `SpeechOptimizer` remains the product name; a short SEO keyword and closely matched domain will be selected together before launch.
 
 ## Final Result
 
