@@ -40,8 +40,8 @@ function RecentSessions({ navigate }) {
             <PlayCircle size={22} />
             <span className="session-title"><strong>{session.title}</strong><small>{session.date}</small></span>
             <span className="session-duration">{session.duration}</span>
-            <span className={`score score-${session.score < 70 ? "amber" : "green"}`}>{session.score}</span>
-            <span className="session-status">{session.status}</span>
+            <span className="session-metric">{session.metric}</span>
+            <span className="session-status">{session.focus}</span>
             <FileText size={18} className="session-open" />
           </button>
         ))}
