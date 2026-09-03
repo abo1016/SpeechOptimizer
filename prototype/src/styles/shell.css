@@ -23,7 +23,7 @@
   cursor: pointer;
 }
 
-.brand img { width: 205px; height: auto; display: block; }
+.brand-lockup { width: 206px; height: auto; display: block; }
 
 .brand-mark {
   width: 36px;
@@ -109,6 +109,7 @@
 .site-footer nav { display: flex; gap: 18px; }
 .site-footer button { padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; }
 .site-footer button:hover { color: var(--blue); }
+.app-frame-focus main { flex: 1; }
 
 .dialog-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 24px; background: rgb(16 24 40 / 56%); }
 .auth-dialog { width: min(100%, 420px); padding: 36px; position: relative; border-radius: var(--radius); background: white; box-shadow: var(--shadow-dialog); }
