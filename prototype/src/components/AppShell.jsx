@@ -14,7 +14,7 @@ import { logEvent } from "../lib/logEvent.js";
 function Brand({ navigate }) {
   return (
     <button className="brand" onClick={() => navigate("/")} aria-label="SpeechOptimizer home">
-      <img src="/assets/speechoptimizer-lockup.png" alt="SpeechOptimizer" />
+      <img className="brand-lockup" src="/assets/speechoptimizer-lockup.png" alt="SpeechOptimizer" />
     </button>
   );
 }
@@ -50,6 +50,7 @@ function AuthDialog({ open, onClose }) {
 
 export function AppShell({ activePath, authOpen, children, navigate, onAuthChange }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const focusMode = activePath === "/analysis/demo-result";
   const isCurrent = (path) => path === "/" ? activePath === "/" : activePath.startsWith(path);
 
   const go = (path) => {
@@ -58,7 +59,7 @@ export function AppShell({ activePath, authOpen, children, navigate, onAuthChang
   };
 
   return (
-    <div className="app-frame">
+    <div className={focusMode ? "app-frame app-frame-focus" : "app-frame"}>
       <header className="topbar">
         <Brand navigate={go} />
         <nav className={menuOpen ? "primary-nav is-open" : "primary-nav"} aria-label="Primary navigation">
@@ -85,15 +86,16 @@ export function AppShell({ activePath, authOpen, children, navigate, onAuthChang
         </div>
       </header>
       <main>{children}</main>
-      <footer className="site-footer">
+      {!focusMode && <footer className="site-footer">
         <span>SpeechOptimizer prototype</span>
         <nav aria-label="Legal links">
+          <button onClick={() => go("/contact")}>Contact</button>
           <button onClick={() => go("/privacy")}>Privacy</button>
           <button onClick={() => go("/terms")}>Terms</button>
           <button onClick={() => go("/refund-policy")}>Refunds</button>
           <button onClick={() => go("/data-deletion")}>Delete data</button>
         </nav>
-      </footer>
+      </footer>}
       <AuthDialog open={authOpen} onClose={() => onAuthChange(false)} />
     </div>
   );
