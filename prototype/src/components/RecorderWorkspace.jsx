@@ -1,4 +1,4 @@
-import { Check, Clock3, FileAudio, Languages, Mic, Pause, RotateCcw, ShieldCheck, Square, Upload } from "lucide-react";
+import { Check, Clock3, FileAudio, Languages, Mic, Pause, RotateCcw, ShieldCheck, Square, Target, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { logEvent } from "../lib/logEvent.js";
 
@@ -13,6 +13,7 @@ function formatTime(totalSeconds) {
 export function RecorderWorkspace({ navigate }) {
   const [status, setStatus] = useState("ready");
   const [seconds, setSeconds] = useState(0);
+  const [retakeCue] = useState(() => window.sessionStorage.getItem("speechOptimizer.retakeCue"));
   const fileRef = useRef(null);
 
   useEffect(() => {
@@ -70,6 +71,7 @@ export function RecorderWorkspace({ navigate }) {
         <p className="eyebrow">Your next take</p>
         <h1 id="recorder-title">Record or upload your audio</h1>
         <p>Get practical feedback on pace, pauses, and clarity—then make the next take better.</p>
+        {retakeCue && <div className="retake-cue"><Target size={18} /><span><strong>Focus for this take</strong>{retakeCue}</span></div>}
       </div>
 
       <div className={`record-stage is-${status}`} aria-live="polite">
