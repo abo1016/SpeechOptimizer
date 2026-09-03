@@ -16,3 +16,6 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 - Borrow only the secondary reference's strong upload hierarchy, nearby trust copy, and scan-friendly constraint facts.
 - Do not copy its affiliate banner, dark purple marketing hero, long SEO page, or promotional navigation into the product workspace.
 - Keep objective speech evidence and actionable next-take cues ahead of broad scores or personality claims.
+- Selected product direction: transcript-first evidence workspace (visual option 2), confirmed 2026-09-03.
+- Keep the existing product name `SpeechOptimizer`; do not replace it with `speech..`.
+- Do not assume a production domain. Before launch, choose a short SEO keyword and a closely matched domain while retaining `SpeechOptimizer` as the product name.
