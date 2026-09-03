@@ -20,12 +20,12 @@ import { logEvent } from "../lib/logEvent.js";
 function HistoryContent({ navigate }) {
   return (
     <div className="history-table">
-      <div className="history-row history-header"><span>Session</span><span>Status</span><span>Duration</span><span>Score</span><span /></div>
+      <div className="history-row history-header"><span>Session</span><span>Status</span><span>Duration</span><span>Focus</span><span /></div>
       {sessions.map((session, index) => (
         <div className="history-row" key={session.title}>
           <span><strong>{session.title}</strong><small>{session.date}</small></span>
           <span className="status-chip"><Check size={14} />Complete</span>
-          <span>{session.duration}</span><span>{session.score}</span>
+          <span>{session.duration}</span><span>{session.focus}</span>
           <span className="row-actions"><button className="icon-button" aria-label={`Delete ${session.title}`} onClick={() => logEvent("history.delete_requested", { index })}><Trash2 size={17} /></button><button className="icon-button" aria-label={`Open ${session.title}`} onClick={() => navigate("/analysis/demo-result")}><ChevronRight size={18} /></button></span>
         </div>
       ))}
@@ -80,21 +80,21 @@ function AdminContent() {
 
 function ContactContent() {
   const contacts = [
-    { title: "Product feedback", detail: "Share workflow friction or a feature idea.", email: "feedback@speechoptimizer.app", icon: MessageSquareText },
-    { title: "Billing support", detail: "Ask about plans, minutes, charges, or refunds.", email: "billing@speechoptimizer.app", icon: CreditCard },
-    { title: "Privacy requests", detail: "Request data access, correction, or deletion.", email: "privacy@speechoptimizer.app", icon: ShieldCheck },
+    { title: "Product feedback", detail: "Share workflow friction or a feature idea.", action: "Send feedback", icon: MessageSquareText },
+    { title: "Billing support", detail: "Ask about plans, minutes, charges, or refunds.", action: "Contact billing", icon: CreditCard },
+    { title: "Privacy requests", detail: "Request data access, correction, or deletion.", action: "Privacy request", icon: ShieldCheck },
   ];
 
   return (
     <div className="contact-grid">
-      {contacts.map(({ title, detail, email, icon: Icon }) => (
+      {contacts.map(({ title, detail, action, icon: Icon }) => (
         <article className="contact-item" key={title}>
           <span className="setting-icon"><Icon size={20} /></span>
           <div><h2>{title}</h2><p>{detail}</p></div>
-          <button className="button button-secondary" onClick={() => logEvent("contact.mock_selected", { channel: title })}><Mail size={17} />{email}</button>
+          <button className="button button-secondary" onClick={() => logEvent("contact.mock_selected", { channel: title })}><Mail size={17} />{action}</button>
         </article>
       ))}
-      <p className="contact-note"><Clock3 size={17} />Mock contact channels for product review. No email is sent from this prototype.</p>
+      <p className="contact-note"><Clock3 size={17} />Contact addresses will use the final launch domain. No email is sent from this prototype.</p>
     </div>
   );
 }
