@@ -21,7 +21,23 @@
 
 .workspace-copy { width: 100%; align-self: stretch; }
 .workspace-copy h1 { margin-bottom: 10px; font-size: 34px; }
-.workspace-copy > p:last-child { max-width: 670px; margin-bottom: 0; font-size: 17px; }
+.workspace-copy > p:not(.eyebrow) { max-width: 670px; margin-bottom: 0; font-size: 17px; }
+
+.retake-cue {
+  max-width: 670px;
+  margin-top: 18px;
+  padding: 12px 14px;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 9px;
+  border: 1px solid #b2ccff;
+  border-radius: 7px;
+  background: var(--blue-pale);
+  color: var(--blue);
+}
+
+.retake-cue span { display: grid; gap: 3px; color: var(--ink-soft); font-size: 13px; }
+.retake-cue strong { color: var(--ink); }
 
 .record-stage {
   width: min(100%, 640px);
@@ -173,6 +189,7 @@
 .session-title { min-width: 0; display: grid; gap: 3px; }
 .session-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .session-title small, .session-duration { color: var(--ink-muted); }
+.session-metric { color: var(--green); font-size: 12px; font-weight: 720; }
 .score { width: 40px; padding: 4px 0; border-radius: 14px; text-align: center; font-size: 12px; font-weight: 750; }
 .score-green { background: var(--green-pale); color: var(--green); }
 .score-amber { background: var(--amber-pale); color: var(--amber); }
