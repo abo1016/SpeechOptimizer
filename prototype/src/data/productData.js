@@ -5,7 +5,6 @@ import {
   Gauge,
   History,
   LayoutDashboard,
-  MessagesSquare,
   Pause,
   ShieldCheck,
   Sparkles,
@@ -16,7 +15,6 @@ export const primaryNavigation = [
   { label: "Coach", path: "/", icon: Sparkles },
   { label: "History", path: "/history", icon: History },
   { label: "Pricing", path: "/pricing", icon: CreditCard },
-  { label: "Contact", path: "/contact", icon: MessagesSquare },
 ];
 
 export const accountNavigation = [
@@ -50,9 +48,9 @@ export const feedbackPreview = [
 ];
 
 export const sessions = [
-  { title: "YouTube Short — Clearer openings", date: "Aug 30, 2026", duration: "1:42", score: 78, status: "Good" },
-  { title: "Podcast intro — Episode 23", date: "Aug 28, 2026", duration: "1:18", score: 62, status: "Needs work" },
-  { title: "Creator update — Product launch", date: "Aug 24, 2026", duration: "1:56", score: 85, status: "Great" },
+  { title: "YouTube Short — Clearer openings", date: "Sep 2, 2026", duration: "1:42", metric: "146 WPM", focus: "Opening" },
+  { title: "Podcast intro — Episode 23", date: "Aug 31, 2026", duration: "1:18", metric: "3 fillers", focus: "Transitions" },
+  { title: "Creator update — Product launch", date: "Aug 28, 2026", duration: "1:56", metric: "2 pauses", focus: "Pacing" },
 ];
 
 export const priorities = [
