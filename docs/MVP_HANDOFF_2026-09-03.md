@@ -1,11 +1,11 @@
 # SpeechOptimizer MVP 当前开发交接
 
 > 交接日期：2026-09-03（Asia/Shanghai）
-> 最近更新：2026-09-04 19:26（Asia/Shanghai），已将当前验证 source 提交为 `a836b72`，推送到 `codex/cicd-bootstrap` 并创建 PR #1。GitHub-hosted Actions run `33867873645` 的 `MVP quality gate` 已真实通过（53 秒）。生产 Release 开关与 Vercel secrets 仍为空，未合并、未发布、未改 branch protection。
+> 最近更新：2026-09-04 19:36（Asia/Shanghai），PR #1 的 Actions runtime 已纠偏到 Node 24：checkout v7、官方 successor `pnpm/setup@v2`、Docker actions v4/v4/v7。中间一次 `pnpm/action-setup@v6` 卡住 run 已主动取消；最终 workflow commit `5cbca77` 对应 run `33868583632` 全绿且 annotations 为空。生产 Release 仍关闭，未合并、未部署。
 > 工作区：`/Users/bopop/Documents/SpeechOptimizer`
 > Git 分支：`main`
 > 远端同步：已执行 `git pull --ff-only`，结果为 `Already up to date.`
-> 最近核验：2026-09-04 19:26（Asia/Shanghai）；本地常规/UTC 双轮完整门禁、YAML/安全结构与 diff 检查保持有效；新增远端证据为 PR #1 的 GitHub-hosted `MVP quality gate` SUCCESS。Railway 仍 `latestDeployment: null`，Vercel `list_teams` 仍为空，因此不能把 CI 绿灯表述为生产部署完成。
+> 最近核验：2026-09-04 19:36（Asia/Shanghai）；workflow commit `5cbca77` 的 GitHub-hosted run `33868583632` SUCCESS（1m8s），所有步骤通过，check annotations `[]`。本地双轮门禁与静态证据保持；Railway/Vercel/Cloudflare 生产链仍未执行。
 > 当前状态：**本地 MVP、质量门禁、部署脚手架、API 容器运行证据，以及 Railway project/service/domain/persistent-volume 初始化已完成**；Supabase 项目已创建。Railway source/首次 deployment、Vercel runtime、Cloudflare DNS 写入、真实 Provider、生产持久化、部署后 E2E 与 Waffo 外部验收仍未完成，因此**不能宣称正式上线验收完成**。当前会话未获授权 commit/push/merge。
 
 ## 0. Canonical Handoff State
@@ -17,16 +17,16 @@
 | **Goal** | 完成 SpeechOptimizer 整个 MVP，并达到当前代码、测试、HTTP、浏览器和上线边界可审计的交付质量；在不伪造外部证据的前提下完成 Waffo 官方 Node SDK 3.0.1 集成，并按第 15.13 节继续上线链。 |
 | **Current Phase** | 本地 MVP/部署脚手架、双轮门禁与首轮 GitHub-hosted CI 已完成；PR #1 等待保护规则/合并决策。Railway project/service/domain/单实例卷已创建但无 source/deployment；Vercel Project 与 Cloudflare DNS 仍待打通。 |
 | **Current Objective** | 不扩展 MVP 产品范围；先把“已验证本地 source 可被云平台部署”的门槛打通，再以 `app.bo-pop.top` / `api.bo-pop.top` 完成 Vercel 前端、Railway 单实例 API、Cloudflare DNS/TLS；之后实现 Supabase Postgres/S3 adapter 与真实邮件/OpenAI/OAuth staging/production 链。支付继续 fail closed。 |
-| **Completed** | 既有本地与云端基础资源保持。本轮补齐安全 CI/Release，并将 46 个已验证文件提交为 `a836b72 feat(mvp): 完成可部署源码检查点`；推送 `codex/cicd-bootstrap`，创建 PR #1；GitHub Actions run `33867873645` 的 `MVP quality gate` SUCCESS（53 秒）。任务外 `AGENTS.md` 删除未进入 commit。 |
-| **In Progress** | PR #1 已打开且首轮 CI 通过；当前准备补交本次远端结果的纯文档 checkpoint。main 仍无 ruleset/branch protection，PR 尚未合并；Repository secrets/variables 为空，生产 Release 不会运行。Railway/Vercel/Cloudflare 尚未部署。 |
+| **Completed** | 既有 checkpoint/PR 保持。首轮 run `33867873645` 通过后发现 action Node 20 deprecation annotation；已升级 checkout/Docker actions，并用 `pnpm/setup@v2` 同时安装 Node 24 + pnpm 11.25.0。最终 commit `5cbca77` 的 run `33868583632` SUCCESS（1m8s），annotations 为空。 |
+| **In Progress** | PR #1 已打开，最新 workflow commit 的 CI 全绿；当前补交 Actions runtime 纠偏文档。main 仍无 ruleset/branch protection，PR 尚未合并；Repository secrets/variables 为空，生产 Release 不会运行。 |
 | **Next** | 1）确认并配置 main required check / PR 合并策略；2）合并 PR #1 后验证 main CI，继续保持 Release disabled；3）将现有 Railway `speechoptimizer-api` 连接到已验证 main，不创建第二个 Service；4）配置真实 staging/production variables 后首次部署并验 `/health`；5）建立 Vercel Project 和真实 secrets，再启用 Release；6）Cloudflare DNS、真实 Provider、Supabase adapter 与 Waffo Phase A-D。 |
 | **Blockers** | **本地/PR CI：无代码 blocker，当前本地双轮与 GitHub-hosted CI 全绿。** **main gate：** branch protection/ruleset 和 PR merge 尚未获本轮明确授权。**生产 runtime：** 真实 OpenAI/SMTP/Google 与 Waffo 决策/密钥不完整；GitHub 无 Vercel secrets/production variable；Vercel 无 Team/Project；Cloudflare DNS edit 与 Supabase runtime adapter 仍待完成。 |
 | **Architecture Decisions** | 既有域名/Supabase/单实例持久卷决定保持。Release 新增：workflow_run 必须验证 CI success + push + main，并 checkout 对应 immutable SHA；人工发布仅 main；生产开关默认关闭；GHCR 和 Vercel 独立 job 共享同一 verify gate；Vercel 使用固定 59.11.2 + prebuilt production deploy；checkout 不持久化凭证。 |
-| **Failed Attempts** | 既有历史失败见 15.7–15.12。此次按 owner 要求派发 Luna/max 子代理 `agt_5325c707`，长期只返回 running 且未落盘；随后协调环境中的 `devspace` 命令消失，进程检查也没有遗留代理进程，因此主控接管实现。不得把该子代理记为完成，也不重复启动同范围并行写入。 |
-| **Verification** | **本地：** 常规与 UTC 完整 quality gate exit 0，两轮 MVP HTTP 34/34；YAML/Release 结构/secret pattern/diff checks PASS；Compose v2 未覆盖。**GitHub：** PR #1 Actions run `33867873645`, job `101006745249`, `MVP quality gate` SUCCESS，53 秒。**外部仍未完成：** main 合并后 CI、GHCR push、Railway/Vercel deployment、Cloudflare DNS、真实 Provider/Waffo/Supabase adapter。 |
-| **Git State** | Branch `codex/cicd-bootstrap`；HEAD `a836b7287622dafda2238772c45a8312c686e2fa`，与 `origin/codex/cicd-bootstrap` 同步；PR #1 OPEN，base main。未 merge/rebase/reset/clean/stash。工作树仅剩任务外 tracked `AGENTS.md` 删除未暂存；它未进入 commit。 |
+| **Failed Attempts** | 既有历史与 Luna 通道失败见 15.13。Actions run `33868265419` 使用 `pnpm/action-setup@v6` 后在 Setup pnpm 卡住超过两分钟；官方 release 已声明该 action 由 `pnpm/setup` 继任，因此主动取消该 run，不再重试旧 action。切换 `pnpm/setup@v2` 后恢复正常。 |
+| **Verification** | **本地：** 常规与 UTC 完整 gate exit 0，两轮 MVP HTTP 34/34；YAML/Release/secret/diff checks PASS；Compose v2 未覆盖。**GitHub：** baseline run `33867873645` SUCCESS；最终 Node 24 action run `33868583632`, job `101008967159`, SUCCESS 1m8s，annotations `[]`。中间 run `33868265419` cancelled。**未完成：** main CI、Release/GHCR、Railway/Vercel、DNS 与真实外部 Provider。 |
+| **Git State** | Branch `codex/cicd-bootstrap`；最新 material workflow commit `5cbca77bcb08f7807d9145da7a9b37a8c2fef798` 已推送，PR #1 OPEN/base main；本段文档 checkpoint 是其直接后继。未 merge/rebase/reset/clean/stash。任务外 `AGENTS.md` 删除仍未暂存、未进入任何 commit。 |
 | **Important Files** | `AGENTS.md`（tracked 但当前工作树已删除，需 owner 确认意图）；`docs/MVP_HANDOFF_2026-09-03.md`（恢复入口：第 0 节 + 15.13）；`docs/DEPLOYMENT.md`；`.github/workflows/{ci.yml,release.yml}`；`prototype/vercel.json`；`apps/mvp-server/Dockerfile`；`.dockerignore`；`.waffo/integration-manifest.json`；以及 15.8 中的 MVP/Waffo 关键源码与测试。 |
-| **Session Summary** | 2026-09-04 19:26：在 15.13 本地收口后，经 owner 授权创建 `codex/cicd-bootstrap`、提交 `a836b72`、推送并创建 PR #1；首轮 GitHub-hosted CI 已通过。生产开关仍关闭，未 merge/deploy/DNS/secret write。详见 15.14。 |
+| **Session Summary** | 2026-09-04 19:36：完成 branch/PR/首轮 CI 后，依据 GitHub warning 升级所有 JS actions 到 Node 24 runtime；识别并取消卡住的旧 pnpm action run，切换官方 successor 后最新 CI 全绿且无 annotation。详见 15.15。 |
 
 ## 1. 交接结论
 
@@ -1538,3 +1538,28 @@ duration: 53s
 这份证据覆盖 GitHub Ubuntu Runner 上的 checkout、Node 24、pnpm 11.25.0、逐包 frozen install、常规/UTC 双轮 quality gate 与 diff check。它不覆盖生产 Release，因为 `PRODUCTION_DEPLOY_ENABLED` 与 Vercel secrets 均未配置；也不覆盖 GHCR push、Railway/Vercel deployment 或 Cloudflare DNS。
 
 当前 PR 尚未合并，main 无 ruleset/branch protection。下一步应先由 owner 授权 main 保护规则与合并策略；配置 required `MVP quality gate` 后再合并，并验证 main CI。生产目标和真实 secrets 就绪前继续保持 Release disabled。
+
+### 15.15 2026-09-04 19:36 Actions Node 24 runtime 纠偏 checkpoint（当前最新）
+
+PR 首轮 run `33867873645` 虽然成功，但产生 annotation：checkout/setup-node/pnpm action 仍基于 Node 20，被 Runner 强制到 Node 24。主控读取官方仓库 release 与各 action.yml 后确认当前 Node 24 runtime 主版本：
+
+- `actions/checkout@v7`；
+- `pnpm/setup@v2`（`pnpm/action-setup` 的官方 successor）；
+- `docker/setup-buildx-action@v4`；
+- `docker/login-action@v4`；
+- `docker/build-push-action@v7`。
+
+第一次尝试把旧 `pnpm/action-setup` 升到 v6，run `33868265419` 在 Setup pnpm 阶段超过两分钟无进展。官方 v6 release 明确指向 successor，因此主控取消该 run，删除独立 setup-node 步骤，改用 `pnpm/setup@v2` 一次安装 `pnpm 11.25.0` 与 `node@24`，并设置 `install: false`，继续由下一步逐包 frozen install。
+
+最终证据：
+
+```text
+workflow commit: 5cbca77bcb08f7807d9145da7a9b37a8c2fef798
+run: 33868583632
+job: 101008967159
+result: SUCCESS
+duration: 1m8s
+annotations: []
+```
+
+所有 setup、逐包依赖安装、常规门禁、UTC 门禁和 diff check 均通过。Release workflow 没有被执行，因为 production variable 仍不存在；Docker action 的实际 push 与 Vercel CLI 部署仍需未来受控 Release 验证。

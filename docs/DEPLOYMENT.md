@@ -55,7 +55,7 @@ Cloudflare 建议：
 
 PR、`main` push 和手动运行都会执行：
 
-1. Node.js 24 + pnpm 11.25.0；
+1. `pnpm/setup@v2` 安装 Node.js 24 + pnpm 11.25.0；
 2. 所有独立 package lockfile 的冻结依赖安装；
 3. 第一轮完整 `quality-gate`；
 4. 独立 `TZ=UTC` 第二轮完整 `quality-gate`；
@@ -89,6 +89,8 @@ Release 还会执行以下安全门禁：
 - 自动触发只接受成功的 `CI` 对 `main` 的 push，人工触发也只接受 `main`；
 - checkout 固定到已经通过 CI 的精确 commit SHA，并重新运行常规与 `TZ=UTC` 双轮完整门禁；
 - 所有 checkout 都关闭凭证持久化，GHCR 的 `packages: write` 只授予镜像发布 job；
+- GitHub checkout 使用 Node 24 runtime 的 `actions/checkout@v7`，pnpm/Node 使用官方 successor `pnpm/setup@v2`；
+- Docker 发布 action 使用 Node 24 runtime 的 `setup-buildx@v4`、`login@v4`、`build-push@v7`；
 - Vercel CLI 固定为 `59.11.2`，三个 Vercel Secret 缺少任意一个都会显式失败且不输出值；
 - 生产 release 使用单一 concurrency group，避免并行发布交叉覆盖。
 
