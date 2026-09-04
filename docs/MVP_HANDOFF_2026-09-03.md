@@ -1,12 +1,12 @@
 # SpeechOptimizer MVP 当前开发交接
 
 > 交接日期：2026-09-03（Asia/Shanghai）
-> 最近更新：2026-09-04 19:36（Asia/Shanghai），PR #1 的 Actions runtime 已纠偏到 Node 24：checkout v7、官方 successor `pnpm/setup@v2`、Docker actions v4/v4/v7。中间一次 `pnpm/action-setup@v6` 卡住 run 已主动取消；最终 workflow commit `5cbca77` 对应 run `33868583632` 全绿且 annotations 为空。生产 Release 仍关闭，未合并、未部署。
+> 最近更新：2026-09-04（Asia/Shanghai）。PR #1 已于 2026-09-04 合并，合并提交为 `1c38e65a6c88212225fea4c70587b33a3f9ffb78`；[PR #2](https://github.com/abo1016/SpeechOptimizer/pull/2) 是将线上部署修复提交 `3a912b7` 与交接文档提交 `deeeca3` 同步到 `main` 的既定路径，合并后 `main` 将包含部署与文档提交。Sites 与 Railway 已完成可浏览器验收的 Demo/Mock 部署；生产 Release 仍关闭。
 > 工作区：`/Users/bopop/Documents/SpeechOptimizer`
-> Git 分支：`main`
-> 远端同步：已执行 `git pull --ff-only`，结果为 `Already up to date.`
-> 最近核验：2026-09-04 19:36（Asia/Shanghai）；workflow commit `5cbca77` 的 GitHub-hosted run `33868583632` SUCCESS（1m8s），所有步骤通过，check annotations `[]`。本地双轮门禁与静态证据保持；Railway/Vercel/Cloudflare 生产链仍未执行。
-> 当前状态：**本地 MVP、质量门禁、部署脚手架、API 容器运行证据，以及 Railway project/service/domain/persistent-volume 初始化已完成**；Supabase 项目已创建。Railway source/首次 deployment、Vercel runtime、Cloudflare DNS 写入、真实 Provider、生产持久化、部署后 E2E 与 Waffo 外部验收仍未完成，因此**不能宣称正式上线验收完成**。当前会话未获授权 commit/push/merge。
+> Git 分支：`codex/cicd-bootstrap`
+> 远端同步：当前部署分支已推送到 `origin/codex/cicd-bootstrap`；PR #2 是部署与文档同步到 `main` 的当前路径，合并后以其远端合并提交和 `main` CI 为准。
+> 最近核验：Sites 部署状态为成功，主站启用 owner-only 登录保护；Railway API `/health` 返回 HTTP 200，模式为 `mock`，数据目录为 `/var/lib/speechoptimizer`。自定义域名 `app.bo-pop.top` 的 Sites `status`、`provider_status`、`ssl_status` 均为 `active`，匿名公网访问返回 HTTP 401 登录门槛，不再是 404。主站、API、持久卷和同源 API 代理均已上线。
+> 当前状态：**SpeechOptimizer 已完成可浏览器验收的 Demo/Mock 部署**，前端、API、Railway 持久卷和同源 `/api/*`、`/health` 代理均已上线；模型、支付、邮件、Google OAuth、生产数据库/对象存储、可观测性等外部依赖仍未接入，不应将当前状态表述为完整生产模式。PR #2 是将 `3a912b7` 的 4 个部署文件变更与 `deeeca3` 的文档回写同步到 `main` 的既定路径；合并后 `main` 将包含二者。根目录 `AGENTS.md` 删除仍是任务外用户改动。
 
 ## 0. Canonical Handoff State
 
@@ -14,23 +14,23 @@
 
 | Field | Current State |
 | --- | --- |
-| **Goal** | 完成 SpeechOptimizer 整个 MVP，并达到当前代码、测试、HTTP、浏览器和上线边界可审计的交付质量；在不伪造外部证据的前提下完成 Waffo 官方 Node SDK 3.0.1 集成，并按第 15.13 节继续上线链。 |
-| **Current Phase** | 本地 MVP/部署脚手架、双轮门禁与首轮 GitHub-hosted CI 已完成；PR #1 等待保护规则/合并决策。Railway project/service/domain/单实例卷已创建但无 source/deployment；Vercel Project 与 Cloudflare DNS 仍待打通。 |
-| **Current Objective** | 不扩展 MVP 产品范围；先把“已验证本地 source 可被云平台部署”的门槛打通，再以 `app.bo-pop.top` / `api.bo-pop.top` 完成 Vercel 前端、Railway 单实例 API、Cloudflare DNS/TLS；之后实现 Supabase Postgres/S3 adapter 与真实邮件/OpenAI/OAuth staging/production 链。支付继续 fail closed。 |
-| **Completed** | 既有 checkpoint/PR 保持。首轮 run `33867873645` 通过后发现 action Node 20 deprecation annotation；已升级 checkout/Docker actions，并用 `pnpm/setup@v2` 同时安装 Node 24 + pnpm 11.25.0。最终 commit `5cbca77` 的 run `33868583632` SUCCESS（1m8s），annotations 为空。 |
-| **In Progress** | PR #1 已打开，最新 workflow commit 的 CI 全绿；当前补交 Actions runtime 纠偏文档。main 仍无 ruleset/branch protection，PR 尚未合并；Repository secrets/variables 为空，生产 Release 不会运行。 |
-| **Next** | 1）确认并配置 main required check / PR 合并策略；2）合并 PR #1 后验证 main CI，继续保持 Release disabled；3）将现有 Railway `speechoptimizer-api` 连接到已验证 main，不创建第二个 Service；4）配置真实 staging/production variables 后首次部署并验 `/health`；5）建立 Vercel Project 和真实 secrets，再启用 Release；6）Cloudflare DNS、真实 Provider、Supabase adapter 与 Waffo Phase A-D。 |
-| **Blockers** | **本地/PR CI：无代码 blocker，当前本地双轮与 GitHub-hosted CI 全绿。** **main gate：** branch protection/ruleset 和 PR merge 尚未获本轮明确授权。**生产 runtime：** 真实 OpenAI/SMTP/Google 与 Waffo 决策/密钥不完整；GitHub 无 Vercel secrets/production variable；Vercel 无 Team/Project；Cloudflare DNS edit 与 Supabase runtime adapter 仍待完成。 |
+| **Goal** | 完成 SpeechOptimizer 整个 MVP，并达到当前代码、测试、HTTP、浏览器和上线边界可审计的交付质量；在不伪造外部证据的前提下完成 Waffo 官方 Node SDK 3.0.1 集成，并按第 15.16 节继续上线链。 |
+| **Current Phase** | 可浏览器验收的 Sites + Railway Demo/Mock 部署已完成；PR #2 是将 `3a912b7` 部署变更与 `deeeca3` 文档回写同步到 `main` 的既定路径，合并后 `main` 将包含二者。 |
+| **Current Objective** | 保持当前单实例 Mock 部署可验收；完成 PR #2 的检查与合并后核验 `main`，再按外部依赖准备情况接入真实模型、邮件、OAuth、支付、数据库/对象存储与可观测性。Vercel Release 流程保留为遗留/备用路径，未经 owner 决策不修改。 |
+| **Completed** | Sites 主站、同源 API 代理、Railway `speechoptimizer-api`、500 MB 持久卷和 Mock 全链路已上线；主站 owner-only 登录保护、Railway `/health` HTTP 200、`app.bo-pop.top` 域名状态及匿名 401 门槛均已核验。PR #1 于 2026-09-04 以合并提交 `1c38e65` 合并；部署源码提交 `3a912b7` 与文档提交 `deeeca3` 已推送到 `codex/cicd-bootstrap`。 |
+| **In Progress** | 线上仍为 `mock` 模式，真实模型/支付/邮件/OAuth/生产数据层和监控尚未配置；PR #2 正在完成部署与文档同步。根目录 `AGENTS.md` 删除继续保持未暂存，不得带入部署提交。 |
+| **Next** | 1）完成 PR #2 的检查与合并，并核验 `main` CI；2）保持当前单实例 Railway volume 部署并继续监控 `/health`；3）补齐真实 OpenAI、邮件、Google OAuth、Waffo、数据库/对象存储、备份和监控；4）真实依赖就绪后再做 staging/production E2E；5）如需启用 Vercel Release，先由 owner 明确其作为主路径还是备用路径。 |
+| **Blockers** | **部署运行：无当前阻塞，Mock 全链路已通过。** **完整生产模式：** OpenAI/SMTP/Google/Waffo 凭证与业务决策、生产数据库/对象存储、备份和监控仍不完整。**源码同步：** PR #2 是既定同步路径，合并后 `main` 将包含 `3a912b7` 与 `deeeca3`。 |
 | **Architecture Decisions** | 既有域名/Supabase/单实例持久卷决定保持。Release 新增：workflow_run 必须验证 CI success + push + main，并 checkout 对应 immutable SHA；人工发布仅 main；生产开关默认关闭；GHCR 和 Vercel 独立 job 共享同一 verify gate；Vercel 使用固定 59.11.2 + prebuilt production deploy；checkout 不持久化凭证。 |
 | **Failed Attempts** | 既有历史与 Luna 通道失败见 15.13。Actions run `33868265419` 使用 `pnpm/action-setup@v6` 后在 Setup pnpm 卡住超过两分钟；官方 release 已声明该 action 由 `pnpm/setup` 继任，因此主动取消该 run，不再重试旧 action。切换 `pnpm/setup@v2` 后恢复正常。 |
-| **Verification** | **本地：** 常规与 UTC 完整 gate exit 0，两轮 MVP HTTP 34/34；YAML/Release/secret/diff checks PASS；Compose v2 未覆盖。**GitHub：** baseline run `33867873645` SUCCESS；最终 Node 24 action run `33868583632`, job `101008967159`, SUCCESS 1m8s，annotations `[]`。中间 run `33868265419` cancelled。**未完成：** main CI、Release/GHCR、Railway/Vercel、DNS 与真实外部 Provider。 |
-| **Git State** | Branch `codex/cicd-bootstrap`；最新 material workflow commit `5cbca77bcb08f7807d9145da7a9b37a8c2fef798` 已推送，PR #1 OPEN/base main；本段文档 checkpoint 是其直接后继。未 merge/rebase/reset/clean/stash。任务外 `AGENTS.md` 删除仍未暂存、未进入任何 commit。 |
-| **Important Files** | `AGENTS.md`（tracked 但当前工作树已删除，需 owner 确认意图）；`docs/MVP_HANDOFF_2026-09-03.md`（恢复入口：第 0 节 + 15.13）；`docs/DEPLOYMENT.md`；`.github/workflows/{ci.yml,release.yml}`；`prototype/vercel.json`；`apps/mvp-server/Dockerfile`；`.dockerignore`；`.waffo/integration-manifest.json`；以及 15.8 中的 MVP/Waffo 关键源码与测试。 |
-| **Session Summary** | 2026-09-04 19:36：完成 branch/PR/首轮 CI 后，依据 GitHub warning 升级所有 JS actions 到 Node 24 runtime；识别并取消卡住的旧 pnpm action run，切换官方 successor 后最新 CI 全绿且无 annotation。详见 15.15。 |
+| **Verification** | **本次 PR #2 本地：** 常规与 UTC 完整质量门禁、原型生产构建、`git diff --check` 通过；Sites Worker `8/8`。**历史部署核验：** 常规与 UTC 完整质量门禁各 `165/165`、原型测试 `21/21`、Sites Worker `6/6`，以及 Railway 创建匿名会话、分析任务、WAV 上传、报告获取和删除链路均通过；真实 Chrome 已验证上传合成 WAV、分析、报告跳转及指标展示；最终 `/health` HTTP 200。历史 GitHub CI run `33868583632` SUCCESS 且 annotations `[]`，不替代当前线上验收。 |
+| **Git State** | Branch `codex/cicd-bootstrap`；部署源码提交 `3a912b7` 与文档提交 `deeeca3` 已推送；PR #1 已于 2026-09-04 合并，merge commit `1c38e65a6c88212225fea4c70587b33a3f9ffb78`。PR #2 是将部署与文档同步到 `main` 的既定路径，合并后以 `main` CI 核验；任务外 `AGENTS.md` 删除仍未暂存、未进入任何 commit。 |
+| **Important Files** | `AGENTS.md`（tracked 但当前工作树已删除，需 owner 确认意图）；`docs/MVP_HANDOFF_2026-09-03.md`（恢复入口：第 0 节 + 15.16）；`docs/DEPLOYMENT.md`；`apps/mvp-server/Dockerfile`、`prototype/.openai/hosting.json`、`prototype/worker/index.js`、`prototype/tests/sites-worker.test.mjs`（线上部署变更）；以及 `.github/workflows/{ci.yml,release.yml}`、`.waffo/integration-manifest.json` 与 MVP/Waffo 关键源码。 |
+| **Session Summary** | 2026-09-04：完成 Sites + Railway Demo/Mock 部署、持久卷、同源代理、域名和浏览器端验收；PR #1 已合并，部署源码提交 `3a912b7` 与文档提交 `deeeca3` 已推送到 `codex/cicd-bootstrap`；PR #2 是同步到 `main` 的既定路径。 |
 
 ## 1. 交接结论
 
-当前工作区包含一套完整的本地 SpeechOptimizer MVP 代码。2026-09-03 晚间第一阶段曾达到：**本地代码门禁、独立 UTC 门禁、只读安全审查和匿名上传到报告的真实 Chrome smoke 全部通过**。随后 owner 确认按推荐支付方案继续，旧 Waffo 注入边界已经迁移到官方 `@waffo/waffo-node 3.0.1`，Wave 2 跨包等价修复与 schemaVersion 2 manifest 也已落盘。由于这些支付/持久化代码是在历史绿灯之后继续修改，**当前 HEAD 工作树仍不能沿用上一次绿灯结论**。范围覆盖：
+当前工作区包含一套完整的本地 SpeechOptimizer MVP 代码，并已在 `codex/cicd-bootstrap` 上形成可部署源码检查点。2026-09-04 已完成可浏览器验收的 Sites + Railway Demo/Mock 部署：**本地代码门禁、独立 UTC 门禁、Railway API 全链路和匿名上传到报告的真实 Chrome smoke 均有通过证据**。线上 API 仍明确运行在 `mock` 模式，不把健康检查或 Mock 报告当作真实 Provider 生产证据。旧 Waffo 接线中断、fixture 红灯和 loopback 限制属于下方历史 checkpoint，不再是当前 Demo 部署的运行阻塞。范围覆盖：
 
 - 匿名会话、Magic Link、Google OAuth 本地替身、Cookie 会话、账户隔离、角色授权和管理员操作；
 - 音频录制/上传、服务端 MIME/大小/时长校验、本地对象存储、转写、指标和结构化反馈；
@@ -39,7 +39,7 @@
 - React 前端从旧 Demo 页面切换到本地 HTTP API，覆盖工作台、处理页、报告页、比较页、历史、计费、隐私、认证和管理页面；
 - 本地 Docker 依赖编排（PostgreSQL、MinIO、Mailpit）及静态契约检查。
 
-这些模块现在都存在于工作区。需要严格区分两个状态：① **Waffo 重构前稳定基线**已完成两轮全量质量门禁和 Chrome Headless 主链路验证；② **当前工作树**已经完成主要 Waffo 本地接线与跨包修复，account-billing/provider-adapters/prototype 当前定向回归为绿，mvp-server check/build 为绿，但 Step 1 仍被 2 个真实 production fixture/decision 契约失败和当前环境的 27 个 loopback `EPERM` 阻断，同时还有两个源码文件违反 300 行硬上限。接手者应从第 15.7 节继续，而不是回到第 12 节旧中断点。外部 Waffo Sandbox、真实 STT/LLM、真实 Google/邮件服务仍未联调。
+这些模块现在都存在于工作区。需要严格区分两个状态：① **当前 Demo/Mock 部署**已经通过 Sites、Railway、持久卷、同源代理和浏览器主链路验收；② **完整生产模式**仍缺真实 Waffo/支付、STT/LLM、Google、邮件、生产数据库/对象存储、备份和可观测性。历史实施细节、失败尝试和旧 blocker 仍保留在第 12–15 节，但当前恢复入口是第 0 节与第 15.16 节。
 
 ## 2. 本轮执行时间线
 
@@ -55,13 +55,13 @@
 
 ### 3.1 Git 与本地运行时文件
 
-- 当前分支：`main`。
+- 当前分支：`codex/cicd-bootstrap`；线上部署源码提交为 `3a912b7`，文档回写提交为 `deeeca3`，均已推送到该分支；PR #2 是同步到 `main` 的既定路径，合并后 `main` 将包含二者。
 - 已确认远端：`origin` 指向 `https://github.com/abo1016/SpeechOptimizer.git`。
-- 未执行 `commit`、`merge`、`push`、`rebase`、`reset` 或清理操作。
+- PR #1 已于 2026-09-04 合并，合并提交为 `1c38e65`；PR #2 是将部署提交 `3a912b7` 和文档提交 `deeeca3` 同步到 `main` 的既定路径，合并后 `main` 将包含二者。
 - `prototype/src/App.jsx`、`AppShell.jsx`、`RecorderWorkspace.jsx`、各页面和 `main.jsx` 是已修改的既有文件。
 - `apps/`、`packages/`、`services/`、`spikes/`、`infra/`、`scripts/`、`prototype/src/` 与 `prototype/tests/` 当前已由提交 `d1432f3` 跟踪；此前“从 stash 恢复的大量未跟踪源码”属于 superseded historical state，不应据此判断当前 diff。
 - `.data/`、`apps/mvp-server/.data/` 和 `.pnpm-store/` 是本地运行/测试状态或依赖状态，不应作为代码审查结论，也不要用删除工作区的方式“清理”。
-- 在当前快照执行过 `git diff --check`，结果退出码为 0；前端最后改动后仍应在最终门禁前再次执行。
+- 当前部署源码与文档已执行 `git diff --check`，结果退出码为 0；后续代码改动仍应在交付前再次执行。
 
 ### 3.2 Node/pnpm 运行时
 
@@ -128,11 +128,11 @@ created -> uploaded -> transcribing -> analyzing -> completed
 ### 4.4 账户、权限、计费与 Waffo 边界
 
 - [services/account-billing/src/auth-service.js](/Users/bopop/Documents/SpeechOptimizer/services/account-billing/src/auth-service.js)：一次性 Magic Link、OAuth state、session 撤销、账户禁用和角色授权。
-- [services/account-billing/src/entitlement-service.js](/Users/bopop/Documents/SpeechOptimizer/services/account-billing/src/entitlement-service.js)：原有最早到期预扣/确认/释放仍在；已加入 `startsAt` 生效窗口和 `sourceSummary()`，用于“年付但每月仅 60 分钟、月末清零”和自动退款前判断权益是否已消费。当前 account-billing 定向测试 33/33 通过，但最终全量门禁仍未重新完成。
+- [services/account-billing/src/entitlement-service.js](/Users/bopop/Documents/SpeechOptimizer/services/account-billing/src/entitlement-service.js)：原有最早到期预扣/确认/释放仍在；已加入 `startsAt` 生效窗口和 `sourceSummary()`，用于“年付但每月仅 60 分钟、月末清零”和自动退款前判断权益是否已消费。account-billing 定向测试已记录为 33/33；当前完整门禁结果以第 15.16 节记录的双轮 `165/165` 为准。
 - [services/account-billing/src/billing-policy.js](/Users/bopop/Documents/SpeechOptimizer/services/account-billing/src/billing-policy.js)：本轮新增，统一定义 Free、Pro 月付/年付、分钟包、Deep Report 的 purchase type 与订阅周期；`pro_yearly` 当前设计为 Waffo 12 个月计费周期，同时在本地预建 12 个按月生效/过期的 60 分钟批次。
 - [services/account-billing/src/billing-service.js](/Users/bopop/Documents/SpeechOptimizer/services/account-billing/src/billing-service.js) + [billing-webhook-processor.js](/Users/bopop/Documents/SpeechOptimizer/services/account-billing/src/billing-webhook-processor.js)：已完成资金 request ID 持久化、Provider write 结果自持久化、启动 inquiry-only reconciliation、一次性/订阅分流、退款人工审核边界和 Webhook 生命周期处理。当前测试为 33/33；但 `billing-service.js` 当前 **328 行**，仍超过仓库单文件 300 行硬上限，需要行为保持地继续拆分。
 - [packages/provider-adapters/src/waffo-gateway.js](/Users/bopop/Documents/SpeechOptimizer/packages/provider-adapters/src/waffo-gateway.js) + [waffo-gateway-support.js](/Users/bopop/Documents/SpeechOptimizer/packages/provider-adapters/src/waffo-gateway-support.js)：已迁移到官方 `@waffo/waffo-node 3.0.1` 的 `order()` / `subscription()` / `refund()` API，覆盖 Hosted Checkout、USD minor 单位、UnknownStatus 同 request ID inquiry、operation/status 恢复判定和 Auth 时间戳归一。当前 provider-adapters 38/38；但 `waffo-gateway-support.js` 当前 **381 行**，超过 300 行硬上限。
-- [apps/mvp-server/src/config.js](/Users/bopop/Documents/SpeechOptimizer/apps/mvp-server/src/config.js)、[providers.js](/Users/bopop/Documents/SpeechOptimizer/apps/mvp-server/src/providers.js) 与 [waffo-webhook.js](/Users/bopop/Documents/SpeechOptimizer/apps/mvp-server/src/waffo-webhook.js)：已接入官方 SDK client factory、原始 body + `X-SIGNATURE` Webhook、生产配置 fail-closed 和未确认 Waffo 决策拒绝启动。当前 `providers.test.js` 的 production fixture 没有同步新增订阅决策字段，是眼前 2 个真实测试失败的直接原因。
+- [apps/mvp-server/src/config.js](/Users/bopop/Documents/SpeechOptimizer/apps/mvp-server/src/config.js)、[providers.js](/Users/bopop/Documents/SpeechOptimizer/apps/mvp-server/src/providers.js) 与 [waffo-webhook.js](/Users/bopop/Documents/SpeechOptimizer/apps/mvp-server/src/waffo-webhook.js)：已接入官方 SDK client factory、原始 body + `X-SIGNATURE` Webhook、生产配置 fail-closed 和未确认 Waffo 决策拒绝启动。历史 `providers.test.js` fixture 契约问题已在部署前收口；当前线上仍为 Mock，真实 Waffo 决策和凭证继续保持未配置。
 - [spikes/sdk-integrations/src/waffo-client.js](/Users/bopop/Documents/SpeechOptimizer/spikes/sdk-integrations/src/waffo-client.js) 与 `webhook.js`：request ID、UnknownStatus inquiry、签名验证、事件 claim/release 的 Spike。
 
 开发模式的本地网关在 [services/account-billing/fixtures/local-adapters.js](/Users/bopop/Documents/SpeechOptimizer/services/account-billing/fixtures/local-adapters.js)，只生成 Mock checkout，不访问外网或产生真实订单。生产模式缺少必要 Provider/密钥时会拒绝启动。
@@ -249,110 +249,41 @@ node /Users/bopop/.codex/skills/waffo-integrate/bin/waffo-verify.js . --json
 
 | 等级 | 风险 | 处理/后续 |
 | --- | --- | --- |
-| 历史已解除 / 当前需重跑 | Waffo 重构前双轮全量质量门禁 | 2026-09-03 晚间曾完成常规与 `TZ=UTC` 两轮全量门禁；**当前支付代码已继续修改，因此该绿灯只作为稳定基线，不代表当前工作树** |
-| BLOCKER | mvp-server 当前真实 fixture/decision 契约失败 | `providers.test.js` 的 production fixture 没有提供新增 `waffoSubscriptionMode` / `waffoSubscriptionRetryPolicy`，当前有 2 个 `WAFFO_DECISION_REQUIRED: subscriptionMode` 真实失败；修复时不得把 unresolved 业务决策伪造成 owner 已确认 |
-| BLOCKER | 当前执行环境禁止 loopback listen | mvp-server 另有 27 个测试因 `listen EPERM: operation not permitted 127.0.0.1` 失败；必须在允许 loopback 的环境重跑，不能把环境失败算通过 |
-| BLOCKER | Waffo 上线人工决策与 Sandbox 环境仍不完整 | feature/核心履约规则已获 owner 确认；`subscriptionMode`、retry contract、userTerminal 人工确认、Go-Live Q1–Q8、compliance、Sandbox/生产凭证仍未完成，因此禁止正式报告/真实收费 |
-| MAJOR | 仓库文件长度硬规则仍未满足 | `billing-service.js` 328 行、`waffo-gateway-support.js` 381 行，均超过 300 行硬上限；最终“可交付”前需要行为保持拆分并重新验证 |
-| MAJOR | 当前工作树尚未重新完成 Step 1–3 | Step 1 已因 mvp-server 红灯中止；因此第一轮完整 quality gate 和独立 `TZ=UTC` 第二轮均未执行，不得沿用历史绿灯 |
-| 部分解除 | 真实浏览器验收 | Waffo 重构前已完成匿名冷启动、375/768/1440、分析提交和报告主链路；支付 UI/Sandbox checkout 尚未验收 |
-| MAJOR | infra compose 只做静态检查，未启动 PostgreSQL/MinIO/Mailpit | 需要本机 Docker 时再执行 `infra/local/scripts/start.sh` 并核对健康状态 |
-| MAJOR | STT/LLM/Google/邮件/Waffo 当前都是 Mock 或注入边界 | 生产配置应缺失即拒绝启动；外部 Sandbox 需要凭证和契约后单独验收 |
+| 已解除 | Sites + Railway Demo/Mock 部署 | 主站、同源代理、Railway API、500 MB 持久卷和 `app.bo-pop.top` 已完成平台状态、HTTP 健康和浏览器验收；API 当前为 `mock`。 |
+| 进行中 | PR #2 源码同步 | 线上 4 个部署文件变更由 `3a912b7` 承载，文档回写由 `deeeca3` 承载；PR #2 是同步到 `main` 的既定路径，合并后 `main` 将包含部署与文档提交。 |
+| BLOCKER（完整生产模式） | 真实模型、邮件、Google OAuth、Waffo 和生产数据层尚未配置 | 当前 Demo/Mock 部署不受阻；接入真实 Provider 前需要凭证、预算/限流、业务决策、staging E2E、Postgres/对象存储迁移和备份策略。 |
+| MAJOR | 当前 JSON/音频本地持久化仍依赖单实例 Railway volume | 在实现并验证 Supabase Postgres/S3 adapter、跨实例幂等和迁移前，不要增加 replica 或移除 `/var/lib/speechoptimizer` volume。 |
+| MAJOR（后续可选） | Vercel Release 流程与当前 Sites 主路径并行存在 | `.github/workflows/release.yml` 的 Vercel job 是遗留/备用路径；未经 owner 决策不修改、启用或将其当作当前主站发布链。 |
+| MINOR | 根目录 `AGENTS.md` 删除属于任务外工作区改动 | 继续保持未暂存、未提交、未恢复；任何文档或部署提交都必须显式排除它。 |
+| 观察项 | 本机 Compose v2 覆盖不足 | 已通过静态/契约门禁，但本机未检测到 Compose v2；不能据此声称 PostgreSQL/MinIO/Mailpit 容器已启动。 |
 | MINOR | Webhook claim/队列默认仅单进程 | 多实例部署前换共享数据库唯一键、Redis 原子 claim 或消息队列 |
 | MINOR | JSON repository/组合快照不是关系型事务 | 单实例 MVP 已加恢复对账；未来生产需统一事务/Outbox/幂等方案 |
 | MINOR | `.data`/`.pnpm-store` 仍是未跟踪本地状态 | 不纳入代码审查，不删除用户数据；最终报告中单独排除 |
 
-## 9. 接续执行顺序
+## 9. 当前接续执行顺序
 
-接手后按以下顺序执行，任一步失败都不要跳过：
+当前部署已经完成，后续接手按以下顺序推进；不要把历史章节中的“首次部署”步骤重新执行：
 
-### Step 1：定向回归
-
-```bash
-cd /Users/bopop/Documents/SpeechOptimizer
-export PATH="/Users/bopop/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/opt/homebrew/bin:$PATH"
-CI=1 node --test prototype/tests/*.test.mjs
-pnpm --dir apps/mvp-server run check
-pnpm --dir apps/mvp-server run test
-pnpm --dir apps/mvp-server run build
-git diff --check
-```
-
-若 HTTP 测试在受限环境报 `EPERM`，必须申请允许本地 loopback 的运行权限后重试；不能把受限环境失败算作通过。
-
-### Step 2：第一轮完整门禁
-
-```bash
-cd /Users/bopop/Documents/SpeechOptimizer
-export PATH="/Users/bopop/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/opt/homebrew/bin:$PATH"
-CI=1 node scripts/quality-gate.mjs all --require-feature-tests
-```
-
-这一步会覆盖 prototype 构建/Sites/功能测试、SDK Spike、语音引擎、Provider、核心平台、账户计费、MVP HTTP 和 infra 静态/契约门禁。
-
-### Step 3：第二轮独立门禁
-
-只有 Step 2 成功后执行：
-
-```bash
-cd /Users/bopop/Documents/SpeechOptimizer
-export PATH="/Users/bopop/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/opt/homebrew/bin:$PATH"
-CI=1 TZ=UTC node scripts/quality-gate.mjs all --require-feature-tests
-```
-
-任意代码修复后，Step 1–3 必须从头重跑。
-
-### Step 4：只读代码审查
-
-门禁双通过后审查：Cookie 签名/CORS/管理员授权、音频路径与删除、取消/重试和权益、恢复/幂等、Webhook 签名/乱序/UnknownStatus、生产配置拒绝启动、日志脱敏、未跟踪文件范围。发现 BLOCKER/MAJOR 时先修复再回到 Step 1。
-
-### Step 5：本地服务与浏览器 smoke
-
-建议分别启动：
-
-```bash
-cd /Users/bopop/Documents/SpeechOptimizer/apps/mvp-server
-export PATH="/Users/bopop/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/opt/homebrew/bin:$PATH"
-node src/index.js
-```
-
-另开终端启动：
-
-```bash
-cd /Users/bopop/Documents/SpeechOptimizer/prototype
-export PATH="/Users/bopop/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/opt/homebrew/bin:$PATH"
-CI=1 pnpm run dev -- --host 127.0.0.1
-```
-
-先用 `curl http://127.0.0.1:8787/health` 做 smoke，再使用 Playwright/浏览器验证第 5.2 节路径和 375/768/1440px 视口。不要进行真实支付或上传真实私人录音。
-
-### Step 6：继续 Waffo 中断态（当前实际入口）
-
-当前接手时**不要直接跑 Sandbox**。先按第 12 节恢复到本地绿灯，再继续：
-
-1. 完成账户计费领域重构：补 `refunds` 仓储/persistence，补 `createSubscription` gateway 契约，拆出 Webhook processor，把 `billing-service.js` 降回文件长度门禁以内；
-2. 用官方 `@waffo/waffo-node 3.0.1` 替换 `packages/provider-adapters/src/waffo-gateway.js` 旧 `checkout.createSession` 实现；每个 write operation 必须处理 `WaffoUnknownStatusError` 并用同一 key inquiry；
-3. 正式 Webhook 必须改为 SDK `webhook().onPayment().onRefund().onSubscriptionStatus().onSubscriptionPeriodChanged().handleWebhook()`，使用 `X-SIGNATURE`，返回 SDK `responseBody` 和 `responseSignature`；旧本地 HMAC `x-waffo-signature` 只能继续服务 Mock 测试或被整体替换，不能冒充生产 Waffo 验签；
-4. 更新领域/Provider/MVP HTTP 测试，先让账户计费、Provider、MVP 定向测试全绿；
-5. 创建 schemaVersion 2 的 `.waffo/integration-manifest.json`：`features=[order, refund, subscription]`，**不要声明 `subscriptionChange`**；把第 7.2 节可确认项登记为 `CONFIRMED_BY_HUMAN`，evidence quote 使用用户原话 `按推荐方案执`；第 7.3 节项目必须保持 `UNRESOLVED`/对应 runtime stub，直到用户明确回答；
-6. 运行 `node /Users/bopop/.codex/skills/waffo-integrate/bin/waffo-verify.js .` 清机械错误；
-7. 再从本文件 Step 1 → Step 3 完整门禁重跑；
-8. 获得 Sandbox 凭证和剩余人工确认后，通过**项目 HTTP 端点**做 Phase A/B/C/D；必须先 `payMethodConfig().inquiry()`，不能直接调用 SDK 自证；
-9. 只有 `waffo-verify.js . --gate report` 通过且 outcome 为 `FULL`/`CONDITIONAL` 时，才允许 `--emit report` 生成正式 Waffo 报告。
+1. 先核对第 0 节与第 15.16 节，再检查分支和工作区；保留根目录 `AGENTS.md` 删除状态，不要将其纳入提交。
+2. 完成 PR #2 的检查与合并，并核验 `main` CI；合并前确认部署、代理校验和文档文件边界，不要通过重写历史或恢复用户文件解决同步问题。
+3. 保持现有 Railway `speechoptimizer-api` 单实例与 `/var/lib/speechoptimizer` volume，用 `/health`、平台日志和浏览器报告监控当前 Mock 运行态。
+4. 真实 Provider 就绪后，先在 staging 配置 OpenAI、邮件、Google OAuth、Waffo 及对应 CORS/回调，再执行真实 E2E；不要将 Mock 结果当作生产证据。
+5. 实现并验证 Supabase Postgres/S3 adapter、迁移、备份和跨实例幂等后，才评估移除本地 volume 或增加 replica。
+6. 若 owner 明确选择 Vercel 作为备用或主发布路径，再单独创建/链接 Project、配置 secrets、运行其 Release gate；在此之前保持现有 Vercel 流程不变。
 
 ## 10. 交付边界
 
-当前交接不包含：
+当前交接已包含经 owner 授权完成的文档/源码提交与远程推送；后续远程 Git 操作仍需遵循当轮授权和严格文件边界。以下事项不属于当前 Demo/Mock 部署的完成范围：
 
-- 任何 commit、merge、push、PR 或远程写操作；
-- 任何真实 Waffo 收费、退款、订阅变更或生产 Webhook；
-- 任何真实用户音频、转写文本或外部 LLM/STT 数据上传；
-- 将本地 Docker 静态配置误称为容器已启动；
-- 将源码/局部测试/代理报告误称为双轮门禁或浏览器验收通过。
+- 真实 Waffo 收费、退款、订阅变更或生产 Webhook；
+- 真实用户音频、转写文本或外部 LLM/STT 数据上传；
+- 将 Mock 健康检查、局部测试或浏览器报告误称为真实 Provider 生产验收；
+- 将源码中的 `API_ORIGIN`、CORS 或持久卷约定误称为已配置的平台事实；
+- 在没有 Supabase adapter、迁移、备份和跨实例幂等证据前移除 Railway volume 或扩容。
 
-完成判定必须同时满足：最终代码定向测试通过、两轮全量质量门禁通过、只读代码审查无 BLOCKER/MAJOR、本地 HTTP/API smoke 通过、浏览器关键路径通过，以及 Waffo 决策/凭证和其正式 gate 明确完成或由 owner 明确把支付移出本轮范围。
+当前 Demo/Mock 交付判定已经满足：部署成功、owner-only 主站可访问、Railway `/health` HTTP 200、自定义域名 active 且匿名返回 401、双轮质量门禁与浏览器报告可核验。完整生产交付仍需真实 Provider、数据层、监控/备份和对应人工决策明确完成，或由 owner 明确将其移出本轮范围。
 
-## 11. 2026-09-03 晚间接续结果
+## 11. 2026-09-03 晚间接续结果（历史记录）
 
 本次从本交接文档继续执行，未提交、未合并、未推送。
 
@@ -366,7 +297,7 @@ CI=1 pnpm run dev -- --host 127.0.0.1
 - 本地基础设施门禁仍仅为静态/契约检查；当前机器未检测到 Compose v2，因此未宣称 PostgreSQL/MinIO/Mailpit 容器已启动。
 - 该绿灯基线之后 owner 已回复 `按推荐方案执`，Waffo feature 和核心履约规则已开始落地；因此**当前真正的第一 BLOCKER 已变成“未完成的 Waffo 重构导致账户计费测试红灯”**，其次才是剩余人工决策与 Sandbox/生产凭证。
 
-## 12. 2026-09-03 21:xx Waffo 接线中断快照（本次最新交接点）
+## 12. 2026-09-03 21:xx Waffo 接线中断快照（历史交接点）
 
 本节优先级高于前文任何“Waffo 尚未开始”或“当前全绿”的旧描述。用户在 Waffo 重构进行中要求立即落盘 handoff，因此本轮**到此停止继续实现**。
 
@@ -772,7 +703,9 @@ Residual risks:
 
 leaf agent 不得 spawn 子 agent，不得 commit、stash、切换/创建分支、reset、restore、rebase、merge、push 或删除其他 agent/用户文件；发现超出 ownership、需要 shared contract/schema/root config/dependency 变化、或测试失败根因跨界时，返回 `ESCALATE`，由协调者重新排程。协调者必须在每个 agent 返回后读取实际文件和验证证据，不能只相信口头“完成”。
 
-## 15. 2026-09-04 Wave 1 实际执行检查点（当前最新）
+## 15. 2026-09-04 Wave 1 实际执行检查点（历史汇总）
+
+> 历史说明：15.1–15.15 是按时间保存的旧检查点，其中“当前”仅指各自记录时刻；任何与线上部署、PR 合并、域名状态或源码分支冲突的表述均已由 15.16 supersede。恢复任务只把第 0 节和 15.16 作为当前入口。
 
 本节 supersede 第 12.3、12.4、12.5 节中“尚未落盘/中断时状态”的描述；第 12 节保留为历史诊断证据，不得作为当前工作树事实。
 
@@ -852,7 +785,7 @@ ChatGPT 已读取本轮 execution output、当前 git diff 和 `@waffo/waffo-nod
 - 当前未完成：`.waffo/integration-manifest.json` 与 validator、prototype 最新测试、两轮完整 quality gate、独立只读安全审查、HTTP smoke、最终浏览器 smoke。当前仍不得称为 MVP 已上线或 Waffo Sandbox 已通过。
 - 下一步最短顺序：创建 schemaVersion 2 manifest（不伪造未确认的人工作业决策）→ 运行 `waffo-verify` → 读取/修正机械错误 → 从 Step 1 重新执行完整门禁。
 
-### 15.7 2026-09-04 当前项目恢复核验与详细交接（本次最新 checkpoint）
+### 15.7 2026-09-04 当前项目恢复核验与详细交接（历史 checkpoint）
 
 本节 supersede 第 1、4.4、6.1、7.4、8、15.4、15.6 中所有与“当前状态”冲突的旧描述；旧章节仍保留为历史演进和失败诊断证据。接手者从本节和第 0 节恢复，不要回到第 12 节旧中断点。
 
@@ -957,7 +890,7 @@ working tree: dirty
 
 当前没有任何新业务代码计划被本次交接任务“默认授权落盘”；本次只整理状态、重新验证并更新 handoff。下一位实现者应把第 15.7.6 节视为直接执行入口。
 
-### 15.8 2026-09-04 本地 MVP 实现收口与最终验证（当前最新 checkpoint）
+### 15.8 2026-09-04 本地 MVP 实现收口与最终验证（历史 checkpoint）
 
 本节 supersede 第 15.7 节及前文所有与“当前本地实现仍有 fixture/行数/loopback/validator blocker”冲突的描述。当前恢复入口为第 0 节 + 本节。
 
@@ -1108,7 +1041,7 @@ commit/push/merge/rebase/reset/clean/stash in this session: none
 
 如用户下一步要求“提交/推送/PR”，应先复核当前 diff/status，再按 Git 授权边界单独执行；本 checkpoint 本身不授权任何远端写操作。
 
-### 15.9 2026-09-04 16:27 续接会话复核 checkpoint（当前最新）
+### 15.9 2026-09-04 16:27 续接会话复核 checkpoint（历史 checkpoint）
 
 本节只更新续接后的当前验证事实，不改变 15.8 已冻结的业务实现、架构决定或浏览器验收结论。当前恢复入口为第 0 节 + 本节；需要了解本地实现收口细节时再回看 15.8。
 
@@ -1169,7 +1102,7 @@ CI=1 TZ=UTC node scripts/quality-gate.mjs all --require-feature-tests
 
 取得这些信息后，按 `waffo-integrate` Step 6 从项目 HTTP 端点开始：先执行 `payMethodConfig().inquiry()`，再完成 Phase A/B1/B2/C1/C2/D，并持续更新 `.waffo/integration-manifest.json`。正式报告前必须通过 `waffo-verify.js . --gate report`；在上述外部事实缺失时，禁止生成正式 payment report 或声称 Sandbox/生产支付验收通过。
 
-### 15.10 2026-09-04 17:02 上线准备与插件初始化 checkpoint（当前最新）
+### 15.10 2026-09-04 17:02 上线准备与插件初始化 checkpoint（历史 checkpoint）
 
 #### 15.10.1 已落盘的部署脚手架
 
@@ -1219,7 +1152,7 @@ Docker CLI 已安装，但 `docker build` 当前连接 `/Users/bopop/.colima/def
 
 本 checkpoint 不授权 commit/push，也不授权创建带费用的 Supabase 项目或替 owner 选择正式域名。
 
-### 15.11 2026-09-04 17:28 部署续接、Railway 诊断与 Docker runtime checkpoint（当前最新）
+### 15.11 2026-09-04 17:28 部署续接、Railway 诊断与 Docker runtime checkpoint（历史 checkpoint）
 
 本节承接 15.10 的上线准备。恢复时优先读取第 0 节 + 本节；Supabase 创建事实沿用 15.10 后续会话已落盘状态，业务代码验证基线仍参考 15.9/15.10。
 
@@ -1321,7 +1254,7 @@ smoke container 已停止并因 `--rm` 清理；Colima 随后停止。没有残�
 
 本 checkpoint 不授权 commit/push，也不授权修改旧 Railway project、写 Cloudflare DNS、填写真实密钥或绕过 Waffo/production fail-closed。
 
-### 15.12 2026-09-04 18:43 Railway project/service/volume checkpoint（当前最新）
+### 15.12 2026-09-04 18:43 Railway project/service/volume checkpoint（历史 checkpoint）
 
 本节承接 15.11。恢复时优先读取第 0 节 + 本节；15.11 中关于 `create_project INVALID_ARGUMENT` 的结论保留为历史失败证据，但已被本节当前云端事实 supersede。
 
@@ -1460,7 +1393,7 @@ railway up
 
 本 checkpoint 未执行 commit/push/source-connect/deployment，也未写入任何生产 secret、Cloudflare DNS 或 Waffo 人工 decision。
 
-### 15.13 2026-09-04 19:12 CI/CD workflow 补齐与双轮验收 checkpoint（当前最新）
+### 15.13 2026-09-04 19:12 CI/CD workflow 补齐与双轮验收 checkpoint（历史 checkpoint）
 
 #### 15.13.1 磁盘事实纠偏与实现
 
@@ -1511,7 +1444,7 @@ git diff --check
 
 本轮另观察到 tracked 根 `AGENTS.md` 在任务外被删除；开始状态中没有该删除，本轮未执行删除或恢复。后续 commit 前必须由 owner 确认该删除是否有意，不能把它静默混入 CI/CD checkpoint。
 
-### 15.14 2026-09-04 19:26 Git checkpoint、PR 与首轮 GitHub CI checkpoint（当前最新）
+### 15.14 2026-09-04 19:26 Git checkpoint、PR 与首轮 GitHub CI checkpoint（历史 checkpoint）
 
 owner 明确授权下一步后，主控执行了以下可审计操作：
 
@@ -1539,7 +1472,7 @@ duration: 53s
 
 当前 PR 尚未合并，main 无 ruleset/branch protection。下一步应先由 owner 授权 main 保护规则与合并策略；配置 required `MVP quality gate` 后再合并，并验证 main CI。生产目标和真实 secrets 就绪前继续保持 Release disabled。
 
-### 15.15 2026-09-04 19:36 Actions Node 24 runtime 纠偏 checkpoint（当前最新）
+### 15.15 2026-09-04 19:36 Actions Node 24 runtime 纠偏 checkpoint（历史 checkpoint）
 
 PR 首轮 run `33867873645` 虽然成功，但产生 annotation：checkout/setup-node/pnpm action 仍基于 Node 20，被 Runner 强制到 Node 24。主控读取官方仓库 release 与各 action.yml 后确认当前 Node 24 runtime 主版本：
 
@@ -1563,3 +1496,34 @@ annotations: []
 ```
 
 所有 setup、逐包依赖安装、常规门禁、UTC 门禁和 diff check 均通过。Release workflow 没有被执行，因为 production variable 仍不存在；Docker action 的实际 push 与 Vercel CLI 部署仍需未来受控 Release 验证。
+
+### 15.16 2026-09-04 Sites + Railway Demo/Mock 部署与 PR #2 源码同步 checkpoint（当前最新）
+
+本节 supersede 前文所有关于“PR #1 尚未合并、Railway 尚未部署、Sites/域名未上线、`active_redeploying`、公网 404、`3a912b7` 尚未合入 `main` 或等待 owner 决定同步路径”的当前状态描述。前文保留为按时间记录的历史证据；恢复任务时优先读取第 0 节、本节和 `docs/DEPLOYMENT.md` 的当前状态章节。
+
+#### 15.16.1 线上部署事实
+
+- Sites 主站已部署成功并启用 owner-only 访问：<https://speechoptimizer.dengbodev.chatgpt.site/>。浏览器验收需要使用当前 ChatGPT 账号登录。
+- Sites 项目为 `appgprj_6a9ab0d858c08191b9891e7aa6ce315c`，版本为 `appgver_7bd145986cc08191925ac77783dd005e`，部署为 `appgdep_6a9ab1ed04648191b0f00ed8a7387ab6`，源码快照为 `deb46218db3f59d4e52f0e54d94725b1d019e792`。
+- Sites 同源转发已将 `/api/*` 与 `/health` 代理到 Railway API；前端、API、同源代理和 Railway 持久卷均已上线。
+- Railway 服务为 `speechoptimizer-api`，区域为美国西部；数据目录为 `/var/lib/speechoptimizer`，当前使用单实例 500 MB 持久卷。
+- Railway API 当前为 `mock` 模式，健康检查 <https://speechoptimizer-api-production.up.railway.app/health> 返回 HTTP 200，响应中的 `status` 为 `ok`、`mode` 为 `mock`。模型、支付、邮件等外部依赖尚未接入，不得将 Mock 结果表述为真实 Provider 生产证据。
+- 自定义域名 <https://app.bo-pop.top/> 的 Sites 域名对象为 `appgdom_6a9ab280354881918e2625eba7f9afd2`；当前 `status=active`、`provider_status=active`、`ssl_status=active`，`last_error=null`。公网匿名访问返回 HTTP 401 登录门槛，不再是平台 404；无需继续修改 DNS。
+- 浏览器端报告已生成：<https://speechoptimizer.dengbodev.chatgpt.site/analysis/5c78b3c8-39b1-4a7c-a317-b28cb74a7b5f/report>。既有真实 Chrome 验收覆盖打开主站、上传合成 WAV、发起分析、跳转报告和展示语速/填充词/长停顿/有效语音指标。
+
+#### 15.16.2 源码、PR 与分支边界
+
+- PR #1 已于 2026-09-04 合并，合并提交为 `1c38e65a6c88212225fea4c70587b33a3f9ffb78`。
+- 线上部署需要的 4 个文件变更由提交 `3a912b799ae1e01f5cae6fd5c6d0d87a39c9f82a`（短 SHA `3a912b7`，消息 `fix(deploy): 完善 Railway 与 Sites 部署配置`）承载，交接文档回写由 `deeeca308d9fb4fe6bfa52048dc7c78e1ef5b105`（短 SHA `deeeca3`）承载，均已推送到 `origin/codex/cicd-bootstrap`；PR #2 是同步到 `main` 的既定路径，合并后 `main` 将包含部署与文档提交。这 4 个文件是：
+  - `apps/mvp-server/Dockerfile`
+  - `prototype/.openai/hosting.json`
+  - `prototype/worker/index.js`
+  - `prototype/tests/sites-worker.test.mjs`
+- `API_ORIGIN`、生产 CORS/允许来源、Sites 同源代理目标以及 Railway volume 挂载属于平台侧配置；源码和 Git diff 只能说明支持这些配置，不能单独证明平台配置已经生效。当前线上状态以平台健康检查、Sites 部署状态、域名状态和浏览器报告为证。
+- 根目录 `AGENTS.md` 的删除属于用户已有的任务外工作区改动，仍不得暂存、提交或恢复。
+
+#### 15.16.3 验收与后续边界
+
+历史部署验收已通过主质量门禁 `165/165`、UTC 时区质量门禁 `165/165`、约 163 项项目测试、Sites Worker `6/6`、前端生产构建、`git diff --check`、Railway API 全链路（匿名会话、分析任务、WAV 上传、报告获取、删除测试数据）以及真实 Chrome 主链路。本次 PR #2 重新通过常规与 UTC 完整质量门禁、前端生产构建、`git diff --check`，并将 Sites Worker 覆盖提升至 `8/8`。当前仍为 Demo/Mock 部署；PR #2 合并后，`main` 将包含 `3a912b7` 部署变更与 `deeeca3` 文档回写。下一阶段另行准备 OpenAI、支付、邮件、Google OAuth、生产数据库/对象存储、备份和可观测性。
+
+现有 `.github/workflows/release.yml` 仍包含 Vercel production release 流程；它是遗留/备用路径，不代表当前 Sites 主站的发布路径。未经 owner 明确决策，不修改、启用或替换该 Vercel 流程。
