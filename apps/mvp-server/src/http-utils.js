@@ -28,6 +28,14 @@ export function sendJson(response, status, payload, headers = {}) {
   response.end(body);
 }
 
+/** 原样发送 Waffo SDK 签名响应；不得套用 MVP JSON data envelope 或改写响应正文。 */
+export function sendRaw(response, status, body, headers = {}) {
+  const bytes = Buffer.isBuffer(body) ? body : Buffer.from(String(body), "utf8");
+  response.writeHead(status, { "content-type": "application/json",
+    "content-length": bytes.byteLength, ...headers });
+  response.end(bytes);
+}
+
 export function route(method, pathname, pattern) {
   if (method !== pattern.method) return null;
   const match = pathname.match(pattern.path);

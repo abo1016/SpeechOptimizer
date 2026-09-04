@@ -35,12 +35,17 @@
 
 ## Waffo
 
-- 只适配官方 `@waffo/pancake-ts` 已公开的方法：`checkout.createSession` 与 `orders.cancelSubscription`。
-- SDK 实例由应用组合根注入，本包不新增依赖，也不读取 Waffo 私钥。
-- 商品必须通过 `productIds` 显式映射为 `PROD_xxx`；MVP gateway 仅接受 USD 正整数美分。
-- 当前领域 `refundOrder` 只有订单 ID 与原因；Waffo 官方退款接口要求 Payment ID、退款展示金额与币种。因此退款固定返回 `WAFFO_REFUND_CONTRACT_UNAVAILABLE`，在共享契约获得授权调整前不得猜测映射。
-- 缺少 SDK、凭证或 Sandbox 时使用 `createUnavailableWaffoGateway`，所有操作明确失败。
-- Waffo 官方资料：https://docs.waffo.ai/integrate/sdks 和 https://docs.waffo.ai/api-reference/endpoints/refunds/create-refund-ticket
+- 适配官方 `@waffo/waffo-node` 3.0.1 的 `order()`、`subscription()` 与 `refund()` resource；本包不新增 SDK 依赖，client 和 UnknownStatus predicate 由组合根注入。
+- 对外只暴露 provider-agnostic port：`createOrder`、`inquiryOrder`、`refundOrder`、`createSubscription`、`inquirySubscription`、`cancelSubscription`、`inquiryRefund`。
+- create 结果字段冻结为 `{ acquiringOrderId, checkoutUrl }` 与 `{ externalSubscriptionId, checkoutUrl }`；退款结果只返回可用的 `acquiringRefundOrderId`；订阅取消和 inquiry 只返回归一化 ID、`status` 与可用 checkout URL。
+- 订单使用 SDK 的 `paymentRequestId/orderCurrency/orderAmount`，订阅使用 `subscriptionRequest/currency/amount`，退款使用 `refundRequestId/acquiringOrderId/refundAmount/refundReason`；不会向退款接口发送不存在的 `currency` 字段。
+- MVP 仅接受 USD 正整数最小货币单位，全部金额通过单一 helper 转为 SDK decimal string；其他币种、零值、负值、小数和非安全整数均稳定返回错误。
+- SDK `ApiResponse` 必须先检查 `isSuccess()`，再读取 `getData()`；非成功响应统一为 `WAFFO_API_ERROR`，成功但缺少必要 ID/action 的响应统一为 `WAFFO_INVALID_RESPONSE`。
+- Hosted Checkout 只从 `orderAction/subscriptionAction` 的 JSON（也接受已解析对象）读取 `webUrl`；缺失或不可解析时 fail closed。
+- order、subscription、refund、cancel 的 UnknownStatus 均只使用原写请求的同一 key inquiry；同键查询仍失败时统一返回可重试的 `WAFFO_STATUS_UNCONFIRMED`，绝不二次 write。
+- `createUnavailableWaffoGateway` 覆盖全部新 port，缺少 SDK、凭证或 Sandbox 时所有操作均明确失败。
+- 日志只记录 operation、非敏感 request ID、商品代码和外部 ID，不记录 Waffo API key、private key、签名或完整 payload。
+- Waffo API 字段依据包内 `waffo-integrate` skill 的 OpenAPI 摘要及已安装 SDK 3.0.1 类型/README；真实 Sandbox/生产网络不在本包测试范围内。
 
 ## Magic Link 邮件
 

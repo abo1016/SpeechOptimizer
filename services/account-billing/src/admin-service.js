@@ -16,7 +16,9 @@ export class AdminService {
     return {
       user,
       analyses: [...this.store.analyses.values()].filter((item) => item.userId === userId),
+      orders: [...this.store.orders.values()].filter((item) => item.userId === userId),
       subscriptions: [...this.store.subscriptions.values()].filter((item) => item.userId === userId),
+      refunds: [...this.store.refunds.values()].filter((item) => item.userId === userId),
       ledger: this.store.ledger.filter((item) => item.userId === userId),
       // 管理员查看账户时同时返回支付事件和分析失败状态，便于定位跨域业务问题。
       webhooks: [...this.store.webhookEvents.values()].filter((item) => this.#eventBelongsToUser(item, userId)),
@@ -29,6 +31,7 @@ export class AdminService {
     if (event.userId === userId) return true;
     if (event.orderId && this.store.orders.get(event.orderId)?.userId === userId) return true;
     if (event.subscriptionId && this.store.subscriptions.get(event.subscriptionId)?.userId === userId) return true;
+    if (event.refundId && this.store.refunds.get(event.refundId)?.userId === userId) return true;
     return false;
   }
 

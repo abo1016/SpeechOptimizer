@@ -1,9 +1,8 @@
-import { createHmac } from "node:crypto";
-import { verifySignature } from "../../../spikes/sdk-integrations/src/webhook.js";
 import { HttpError } from "./errors.js";
-import { readBody, route } from "./http-utils.js";
-import { productCatalog, unknownProduct } from "./application.js";
+import { route } from "./http-utils.js";
+import { productCatalog, unknownProduct } from "./product-catalog.js";
 import { resolveIdentity } from "./routes-auth.js";
+import { createWaffoWebhookHandler } from "./waffo-webhook.js";
 
 export async function handleBilling(context) {
   const { request, pathname, application, json, success } = context;
@@ -24,7 +23,8 @@ export async function handleBilling(context) {
     const input = await json();
     const product = unknownProduct(input.productCode);
     const order = await application.billing.createOrder({ userId: user.id,
-      productCode: input.productCode, amount: product.amount, currency: product.currency });
+      productCode: input.productCode, amount: product.amount, currency: product.currency,
+      userEmail: user.email, userCreatedAt: user.createdAt });
     await application.store.flush();
     return success(201, order);
   }
@@ -48,18 +48,23 @@ export async function handleBilling(context) {
 
 async function webhook(context) {
   context.guardWebhook();
-  const rawBody = await readBody(context.request, context.config.jsonLimitBytes);
-  const signature = context.request.headers["x-waffo-signature"];
-  if (!verifySignature(rawBody, signature, context.config.webhookSecret)) {
-    throw new HttpError("INVALID_SIGNATURE", "Webhook 签名无效", 401);
+  const rawBody = (await context.raw(context.config.jsonLimitBytes)).toString("utf8");
+  const signature = context.request.headers["x-signature"];
+  const client = context.application.providers.waffoClient;
+  if (!client || typeof client.webhook !== "function") {
+    throw new HttpError("WAFFO_NOT_CONFIGURED", "Waffo Webhook client 未配置", 503);
   }
-  let event;
-  try { event = JSON.parse(rawBody.toString("utf8")); } catch {
-    throw new HttpError("INVALID_PAYLOAD", "Webhook JSON 无效", 400);
+  const handler = createWaffoWebhookHandler(client, context.application);
+  let result = await handler.handleWebhook(rawBody, signature);
+  if (result.success) {
+    try {
+      await context.application.store.flush();
+    } catch (error) {
+      context.application.logger.error?.("waffo.webhook_persist_failed", { code: error.code ?? "PERSIST_FAILED" });
+      result = failedSdkResponse(handler, "Webhook 持久化失败");
+    }
   }
-  const result = await context.application.billing.processWebhook(event);
-  await context.application.store.flush();
-  return context.success(200, result);
+  return context.rawResponse(200, result.responseBody, { "X-SIGNATURE": result.responseSignature });
 }
 
 async function mutate(context, operation) {
@@ -74,6 +79,10 @@ function accountIdentity(context) {
   return identity.user;
 }
 
-export function signWebhook(payload, secret) {
-  return createHmac("sha256", secret).update(payload).digest("hex");
+function failedSdkResponse(handler, message) {
+  if (typeof handler.buildFailedResponse !== "function") {
+    throw new HttpError("WAFFO_WEBHOOK_FAILED", message, 503);
+  }
+  const response = handler.buildFailedResponse(message);
+  return { success: false, responseBody: response.body, responseSignature: response.signature, error: message };
 }

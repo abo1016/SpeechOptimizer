@@ -10,7 +10,6 @@ await copy("services/account-billing/src");
 await copy("services/account-billing/fixtures");
 await copy("packages/speech-engine/src");
 await copy("packages/provider-adapters/src");
-await copy("spikes/sdk-integrations/src");
 await cp(resolve("CONTRACT.md"), resolve(output, "apps/mvp-server/CONTRACT.md"));
 await cp(resolve("package.json"), resolve(output, "apps/mvp-server/package.json"));
 await import(new URL("../dist/apps/mvp-server/src/index.js", import.meta.url));

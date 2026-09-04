@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# CI 只需要读取仓库内容；不授予包、部署或仓库写权限。
+permissions:
+  contents: read
+
+# 同一分支只保留最新一次验证，避免旧提交继续占用 Runner。
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-gate:
+    name: MVP quality gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # 非交互 CI 必须显式开启 CI 模式，避免 pnpm 因无 TTY 中断依赖校验。
+      CI: "1"
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          # 后续步骤只读取源码，不把 GitHub 凭证留在本地 Git 配置中。
+          persist-credentials: false
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          # mvp-server 与 core-platform 的 engines 已要求 Node.js 24。
+          node-version: "24"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          # 与当前本地可用 pnpm 主版本保持一致，避免 lockfile 解析差异。
+          version: "11.25.0"
+          run_install: false
+
+      - name: Install locked dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          # 当前仓库尚未统一为根 workspace，每个包都有独立 lockfile，因此逐包冻结安装。
+          packages=(
+            prototype
+            spikes/sdk-integrations
+            packages/speech-engine
+            packages/provider-adapters
+            services/core-platform
+            services/account-billing
+            apps/mvp-server
+          )
+          for package_dir in "${packages[@]}"; do
+            echo "[ci] install ${package_dir}"
+            pnpm --dir "${package_dir}" install --frozen-lockfile
+          done
+
+      - name: Run primary quality gate
+        run: node scripts/quality-gate.mjs all --require-feature-tests
+
+      - name: Run independent UTC quality gate
+        env:
+          # 第二轮固定 UTC，避免本地时区掩盖日期、订阅周期或过期逻辑问题。
+          TZ: UTC
+        run: node scripts/quality-gate.mjs all --require-feature-tests
+
+      - name: Check final diff formatting
+        run: git diff --check

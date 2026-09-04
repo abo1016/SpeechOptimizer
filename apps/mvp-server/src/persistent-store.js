@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import { MemoryStore } from "../../../services/account-billing/src/index.js";
 
 const MAP_FIELDS = ["users", "usersByEmail", "sessions", "magicLinks", "oauthStates", "grants", "holds",
-  "orders", "subscriptions", "webhookEvents", "analyses"];
+  "orders", "subscriptions", "refunds", "webhookEvents", "analyses"];
 const ARRAY_FIELDS = ["ledger", "audit"];
 
 /** 在本地 MemoryStore 契约之上提供请求级快照，便于开发服务重启后恢复账户与计费状态。 */

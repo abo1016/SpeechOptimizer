@@ -14,9 +14,9 @@ node src/index.js
 
 ## 生产配置
 
-复制 `.env.example` 中列出的配置到受控的服务端环境。`NODE_ENV=production` 下缺少 STT、结构化反馈、Google OAuth、邮件、Waffo、Webhook 来源或密钥时，服务会拒绝启动，不会降级到 Mock。
+复制 `.env.example` 中列出的配置到受控的服务端环境。`NODE_ENV=production` 下缺少 STT、结构化反馈、Google OAuth、邮件、Waffo、Webhook 来源或密钥时，服务会拒绝启动，不会降级到 Mock。Waffo 需要 API key、商户私钥、Waffo 公钥、商户 ID、`SANDBOX/PRODUCTION`、通知 URL、成功/失败/取消回跳 URL、商品名称/URL 及已人工确认的 `userTerminal`。
 
-当前仓库尚无可核验的 Waffo Sandbox 凭证和官方事件 Schema，因此生产配置只提供严格网络边界，不能据此宣称支付已完成真实联调。
+当前仓库尚无可核验的 Waffo Sandbox 凭证和完整的上线决策证据；本地 SDK 签名测试不能替代真实 Sandbox 联调，也不能据此宣称支付已完成。
 
 ## 门禁
 

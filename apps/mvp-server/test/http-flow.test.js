@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createRuntime } from "../src/index.js";
-import { signWebhook } from "../src/routes-billing.js";
 import { api, startFixture, waitForStatus, wav } from "./helpers.js";
 
 test("匿名用户可完成幂等创建、上传、异步报告、历史、比较与删除", async (t) => {
@@ -77,7 +76,7 @@ test("失效账户 Cookie 不会阻塞匿名会话初始化", async (t) => {
   assert.match(response.cookie, /so_session=;.*Max-Age=0/);
 });
 
-test("账户身份隔离、免费权益、订单和验签 Webhook 均由服务端约束", async (t) => {
+test("账户身份隔离、免费权益、订单和 SDK 验签 Webhook 均由服务端约束", async (t) => {
   const fixture = await startFixture();
   t.after(() => fixture.close());
   const requested = await api(fixture, "/api/v1/auth/magic-link", { method: "POST",
@@ -90,13 +89,19 @@ test("账户身份隔离、免费权益、订单和验签 Webhook 均由服务�
     body: { productCode: "minutes_30", amount: 1 } });
   assert.equal(order.payload.data.amount, 600);
   const rejected = await api(fixture, "/api/v1/webhooks/waffo", { method: "POST", body: { id: "evt" } });
-  assert.equal(rejected.payload.error.code, "INVALID_SIGNATURE");
-  const event = JSON.stringify({ id: "evt-paid", type: "order.paid", version: 1,
-    occurredAt: Date.now(), data: { orderId: order.payload.data.id } });
-  const signature = signWebhook(event, fixture.config.webhookSecret);
+  assert.equal(rejected.status, 200);
+  assert.deepEqual(rejected.payload, { message: "failed" });
+  assert.ok(rejected.headers.get("x-signature"));
+  const event = JSON.stringify({ id: "evt-paid", eventType: "PAYMENT_NOTIFICATION",
+    occurredAt: Date.now(), result: { merchantOrderId: order.payload.data.id,
+      paymentRequestId: order.payload.data.paymentRequestId,
+      acquiringOrderId: order.payload.data.acquiringOrderId, orderStatus: "PAY_SUCCESS",
+      orderCurrency: "USD", orderAmount: "6.00", orderCompletedAt: new Date().toISOString(),
+      paymentInfo: { productName: "ONE_TIME_PAYMENT" } } });
+  const signature = fixture.providers.waffoWebhookSigner(event);
   const paid = await api(fixture, "/api/v1/webhooks/waffo", { method: "POST", body: event,
-    headers: { "x-waffo-signature": signature, "content-type": "application/json" } });
-  assert.equal(paid.payload.data.processed, true);
+    headers: { "x-signature": signature, "content-type": "application/json" } });
+  assert.deepEqual(paid.payload, { message: "success" });
   assert.equal((await api(fixture, "/api/v1/billing/balance", { cookie })).payload.data.minutes, 35);
   const stranger = await api(fixture, "/api/v1/anonymous/session", { method: "POST" });
   const created = await api(fixture, "/api/v1/analyses", { method: "POST", cookie,
@@ -349,11 +354,14 @@ test("隐私偏好生效且账户删除清理身份、任务和计费数据", as
   const created = await api(fixture, "/api/v1/analyses", { method: "POST", cookie: login.cookie,
     headers: { "idempotency-key": "delete-flow-0001" }, body: {} });
   assert.equal(created.payload.data.analysis.retainAudio, true);
+  fixture.store.refunds.set("delete-refund", { id: "delete-refund", userId: userId, orderId: "deleted-order", status: "pending" });
+  await fixture.store.flush();
   const deleted = await api(fixture, "/api/v1/account", { method: "DELETE", cookie: login.cookie });
   assert.equal(deleted.status, 200);
   assert.match(deleted.cookie, /so_session=;.*Max-Age=0/);
   assert.equal(fixture.store.users.has(userId), false);
   assert.equal(fixture.store.analyses.size, 0);
+  assert.equal(fixture.store.refunds.size, 0);
   assert.equal(fixture.store.ledger.some((row) => row.userId === userId), false);
   assert.equal([...fixture.store.magicLinks.values()].some((row) => row.email === "delete@example.com"), false);
   assert.equal([...fixture.store.webhookEvents.values()].some((row) => row.userId === userId), false);

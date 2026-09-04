@@ -63,9 +63,9 @@
 | `GET` | `/api/v1/billing/subscriptions` | 返回当前账户订阅状态 |
 | `POST` | `/api/v1/billing/subscriptions/:id/cancel` | 请求取消订阅 |
 | `POST` | `/api/v1/billing/orders/:id/refund` | 请求订单退款 |
-| `POST` | `/api/v1/webhooks/waffo` | 使用原始请求体验签并处理幂等事件 |
+| `POST` | `/api/v1/webhooks/waffo` | 使用 Waffo SDK 3.0.1 对原始请求体和 `X-SIGNATURE` 验签并处理幂等事件 |
 
-开发模式订单返回 `localhost` Mock Checkout；Webhook 必须携带 `x-waffo-signature`，签名算法和事件版本由服务端适配器校验。
+开发模式订单返回 `localhost` Mock Checkout；Webhook 仍通过官方 SDK 的 RSA 验签与响应签名流程，测试夹具使用内存密钥，不代表真实 Sandbox 证据。成功或失败均按 SDK 原样返回 `responseBody`，并在 `X-SIGNATURE` 返回 `responseSignature`。Waffo 原始通知会归一为 `{ id, version, type, occurredAt, data }`；订阅付款只记录付款事实，不能直接发放一次性权益，订阅通知必须匹配已有本地订阅。
 
 ## 6. 管理接口
 

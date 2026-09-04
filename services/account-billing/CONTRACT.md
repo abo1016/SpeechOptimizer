@@ -13,7 +13,11 @@
 - `sessionTtlMs`：会话有效期，默认 30 天。HTTP 层仍需使用 `HttpOnly`、`Secure`、合适的 `SameSite` Cookie。
 - `magicLinkTtlMs`：Magic Link 有效期，默认 15 分钟。token 仅存 SHA-256 摘要且只能使用一次。
 - `oauthProvider`：Google OAuth 可注入边界，必须实现 `createAuthorizationUrl` 与 `exchangeCode`。本地 mock URL 明确指向 localhost，不模拟 Google 品牌页面。
-- `gateway`：Waffo 可注入边界，必须实现 `createOrder`、`cancelSubscription`、`refundOrder`。领域服务不读取或记录支付密钥。
+- `gateway`：Waffo 可注入边界，必须实现以下 provider-agnostic port；领域服务不读取或记录支付密钥。
+  - `createOrder({ requestId, merchantOrderId, amount, currency, productCode, userId, userEmail, userCreatedAt })` → `{ acquiringOrderId, checkoutUrl }`。
+  - `createSubscription({ requestId, merchantSubscriptionId, amount, currency, productCode, periodType, periodInterval, userId, userEmail, userCreatedAt })` → `{ externalSubscriptionId, checkoutUrl }`。
+  - `refundOrder({ refundRequestId, acquiringOrderId, amount, currency, reason })` → `{ acquiringRefundOrderId? }`。
+  - `cancelSubscription({ externalSubscriptionId, subscriptionRequest })` → `{ externalSubscriptionId, status }` 形式的不含 Provider payload 的归一结果。
 - `clock` 与 `id`：测试可注入；生产必须使用可信服务端时钟和不可预测、全局唯一 ID。
 
 ## 认证与授权
@@ -48,27 +52,30 @@
 
 ## 支付与 Webhook
 
-- 创建订单先保存本地 pending，再调用 gateway；异常记为 failed 并原样抛出。
-- 订阅取消先向 gateway 请求，Webhook 确认后变为 canceled；取消不撤销当前周期已发权益。
+- 创建订单、订阅、退款和取消都必须按“修改本地 request/state → `await persist()` → gateway 写请求”的顺序执行；UnknownStatus 只能保留原 request ID 供 inquiry，不能生成新的 write request。
+- 创建订单先保存本地 pending，再调用 gateway；异常记为 failed 或 `pending_confirmation` 并原样抛出。
+- 订阅创建必须先写入本地 subscription，再调用 `createSubscription`；Webhook 不得凭空创建订阅。
+- 订阅取消先保存 `cancelAtPeriodEnd` 本地意图，再向 gateway 请求；Webhook 确认后变为 `canceled`，取消不撤销当前周期已发权益。
 - 退款请求先变为 `refund_pending`，只有验签成功的 `order.refunded` Webhook 才变为 refunded 并撤销未使用权益。
 - 单次订单支付失败进入 `payment_failed`；订阅续费失败进入 `past_due`，不会发放新周期权益，也不会立即撤销已发的当前周期权益。
-- 支持事件版本 `1`：`order.paid`、`payment.failed`、`order.refunded`、`subscription.activated`、`subscription.renewed`、`subscription.canceled`。
+- 领域 Webhook 输入固定为 `{ id, version, type, occurredAt, data }`；处理器支持版本 `1` 的 `order.paid`、`payment.pending`、`payment.failed`、`refund.pending`、`refund.failed`、`order.refunded`、`subscription.pending`、`subscription.payment`、`subscription.activated`、`subscription.renewed`、`subscription.canceled`。
+- `subscription.payment` 只记录付款事实，不进入一次性订单权益发放；新周期权益只能由订阅状态/周期事件发放。
 - `event.id` 唯一保证重复投递幂等；订单按本地订单 ID、订阅权益按 `subscriptionId + periodId/currentPeriodEnd` 防止不同事件 ID 的语义重放；同一订单或订阅按 `occurredAt` 忽略旧事件；事件仅在业务处理成功后记录为 processed。
 - 外层 Webhook 适配器必须使用原始请求体验签、限制请求体、校验来源、限流，并在同一数据库事务内落事件与领域变化。
 
 ## 管理操作
 
-- `userOverview(userId)` 查询用户、分析任务关联、订阅和权益流水。
+- `userOverview(userId)` 查询用户、分析任务、订单、退款、订阅、权益流水和关联 Webhook。
 - `disableAccount` 禁用账户并追加审计。
 - `returnMinutes` 人工返还分钟并追加权益流水与管理审计。
 - 调用管理服务前必须通过 `authorize(token, ["admin"])`，适配层不能只依赖前端隐藏按钮。
 
 ## 持久化要求
 
-`MemoryStore` 仅用于本地开发和测试。数据库适配器至少需要以下唯一约束和事务边界：
+`MemoryStore` 仅用于本地开发和测试；它以独立 `refunds` Map 保存退款请求与订单引用。数据库适配器至少需要以下唯一约束和事务边界：
 
 - 用户邮箱规范化后唯一；会话 token 摘要唯一；Magic Link token 摘要唯一。
-- Webhook event ID 唯一；订单 ID、订阅 ID、权益 grant ID、hold ID 和流水 ID 唯一。
+- Webhook event ID 唯一；订单 ID、订阅 ID、退款 ID、退款 request ID、权益 grant ID、hold ID 和流水 ID 唯一。
 - grant 幂等键 `(source, source_id, unit)` 唯一；预扣幂等键 `(user_id, reference_id)` 唯一。
 - Webhook 事件记录、订单/订阅状态和权益发放必须处于同一事务；预扣和余额校验必须使用行锁或等价原子更新。
 

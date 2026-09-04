@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { createRequestId } from "./application.js";
 import { HttpError } from "./errors.js";
-import { errorStatus, readBody, readJson, sendJson } from "./http-utils.js";
+import { errorStatus, readBody, readJson, sendJson, sendRaw } from "./http-utils.js";
 import { handleAccount } from "./routes-account.js";
 import { handleAnalysis } from "./routes-analysis.js";
 import { handleAuth } from "./routes-auth.js";
@@ -43,6 +43,10 @@ function createContext({ request, response, url, application, config, cors, webh
     success(status, data, headers = {}) {
       sendJson(response, status, { data }, { ...cors, ...headers });
       return true;
+    },
+    rawResponse(status, body, headers = {}) {
+      sendRaw(response, status, body, { ...cors, ...headers });
+      return true;
     } };
 }
 
@@ -51,7 +55,7 @@ function corsHeaders(request, config) {
   if (!origin || !config.allowedOrigins.includes(origin)) return {};
   return { "access-control-allow-origin": origin, "access-control-allow-credentials": "true",
     "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
-    "access-control-allow-headers": "content-type,idempotency-key,x-waffo-signature", "vary": "Origin" };
+    "access-control-allow-headers": "content-type,idempotency-key,x-signature", "vary": "Origin" };
 }
 
 function assertOrigin(request, config) {

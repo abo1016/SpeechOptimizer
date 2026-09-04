@@ -17,6 +17,8 @@ export class MemoryStore {
     this.ledger = [];
     this.orders = new Map();
     this.subscriptions = new Map();
+    // 退款请求与订单分开保存，Webhook 和管理员查询都需要用同一个退款引用回溯状态。
+    this.refunds = new Map();
     this.webhookEvents = new Map();
     this.analyses = new Map();
     this.audit = [];

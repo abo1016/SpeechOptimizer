@@ -39,13 +39,32 @@ test("ffprobe durationResolver 通过 core-platform 的真实媒体边界", asyn
 
 test("Waffo gateway 通过 account-billing 的真实订单边界", async () => {
   const store = new MemoryStore();
-  const client = { checkout: { async createSession() { return { sessionId: "cs_1", checkoutUrl: "https://checkout.example" }; } } };
-  const gateway = createWaffoGateway({ client, productIds: { minutes_30: "PROD_1" }, logger });
+  const client = {
+    order() {
+      return { async create() {
+        return apiSuccess({ acquiringOrderId: "AO_1", orderAction: JSON.stringify({ webUrl: "https://checkout.example" }) });
+      } };
+    },
+  };
+  const gateway = createWaffoGateway({
+    client,
+    productIds: { minutes_30: "PROD_1" },
+    productNames: { minutes_30: "30 Minutes" },
+    productUrls: { minutes_30: "https://merchant.example/minutes" },
+    notifyUrl: "https://merchant.example/webhook",
+    successRedirectUrl: "https://merchant.example/success",
+    userTerminal: "WEB",
+    logger,
+  });
   const billing = new BillingService({ store, entitlements: {}, gateway, id: () => "order-1", logger });
-  const order = await billing.createOrder({ userId: "user-1", productCode: "minutes_30", amount: 600 });
+  const order = await billing.createOrder({ userId: "user-1", userEmail: "user@example.com", productCode: "minutes_30", amount: 600 });
   assert.equal(order.status, "created");
-  assert.equal(order.externalOrderId, "cs_1");
+  assert.equal(order.acquiringOrderId, "AO_1");
 });
+
+function apiSuccess(data) {
+  return { isSuccess: () => true, getData: () => data, getCode: () => "0", getMessage: () => undefined };
+}
 
 test("本地 Magic Link sender 通过 account-billing 的真实认证边界", async () => {
   const store = new MemoryStore();

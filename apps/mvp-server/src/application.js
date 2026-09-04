@@ -1,21 +1,23 @@
 import { randomUUID } from "node:crypto";
 import { AdminService, AuthService, BillingService, EntitlementService,
   createIdFactory } from "../../../services/account-billing/src/index.js";
-import { calculateMetrics, compareTakes, resolveFeedback, runTranscription }
-  from "../../../packages/speech-engine/src/index.js";
+import { compareTakes } from "../../../packages/speech-engine/src/index.js";
 import { createCorePlatform } from "../../../services/core-platform/src/index.js";
 import { AnalysisRunner } from "./runner.js";
-import { HttpError, requireInput } from "./errors.js";
+import { requireInput } from "./errors.js";
 import { createDurationResolver } from "./media-duration.js";
-
-const PRODUCTS = Object.freeze({
-  free_monthly: { amount: 0, currency: "USD", minutes: 5 },
-  pro_monthly: { amount: 1200, currency: "USD", minutes: 60 },
-  pro_yearly: { amount: 9600, currency: "USD", minutes: 60 },
-  minutes_30: { amount: 600, currency: "USD", minutes: 30 },
-  minutes_100: { amount: 1500, currency: "USD", minutes: 100 },
-  deep_report: { amount: 499, currency: "USD", reports: 1 },
-});
+import {
+  createSpeechProcessor,
+  findConfirmedHold,
+  findReservedHold,
+  hasPersistedUsage,
+  isUsageDenied,
+  nextAnalysisAttempt,
+  nextRetryReference,
+  removeMapRows,
+  sameOwner,
+  uploadReference,
+} from "./application-analysis-support.js";
 
 /** 业务组合层只调用领域公共接口，并维护 HTTP 查询所需的轻量读模型。 */
 export class MvpApplication {
@@ -28,8 +30,9 @@ export class MvpApplication {
     this.auth = new AuthService({ store, id: createIdFactory("auth"), logger,
       mailer: providers.mailer, oauthProvider: providers.oauthProvider,
       exposeDevTokens: providers.mode === "mock", allowedRedirectOrigins: config.allowedOrigins });
+    // 计费领域的资金写请求必须先 await 这一持久化回调，再触发 Provider 写入。
     this.billing = new BillingService({ store, entitlements: this.entitlements,
-      gateway: providers.waffoGateway, id: createIdFactory("bill"), logger });
+      gateway: providers.waffoGateway, persist: () => store.flush(), id: createIdFactory("bill"), logger });
     this.admin = new AdminService({ store, entitlements: this.entitlements,
       id: createIdFactory("admin"), logger });
     this.core = createCorePlatform({ config: { rootDirectory: config.coreDirectory,
@@ -193,7 +196,8 @@ export class MvpApplication {
     }
     this.store.users.delete(userId);
     removeMapRows(this.store.sessions, (row) => row.userId === userId);
-    for (const field of ["grants", "holds", "orders", "subscriptions", "analyses", "webhookEvents"]) {
+    // 退款读模型同样包含用户和 Provider 引用，账户删除必须一并清理，避免重启后残留财务 PII。
+    for (const field of ["grants", "holds", "orders", "subscriptions", "refunds", "analyses", "webhookEvents"]) {
       removeMapRows(this.store[field], (row) => row.userId === userId || row.owner?.id === userId);
     }
     this.store.ledger = this.store.ledger.filter((row) => row.userId !== userId);
@@ -287,76 +291,4 @@ export class MvpApplication {
   }
 }
 
-export function productCatalog() { return PRODUCTS; }
-
-function createSpeechProcessor(providers, logger) {
-  return {
-    transcribe: ({ bytes }) => runTranscription(providers.sttProvider, bytes),
-    async analyze({ transcript }) {
-      const metrics = calculateMetrics(transcript);
-      const feedback = await resolveFeedback(metrics, providers.feedbackProvider, { transcript, logger });
-      return { version: "speech-engine/v1", metrics,
-        feedback: feedback.items,
-        feedbackMetadata: { source: feedback.source, fallbackReason: feedback.fallbackReason ?? null } };
-    },
-  };
-}
-
-function uploadReference(store, analysis) {
-  return analysisAttempt(analysis) === 0 ? analysis.id : nextRetryReference(store, analysis);
-}
-
-function nextRetryReference(store, analysis) {
-  const prefix = `${analysis.id}:retry:${nextAnalysisAttempt(analysis)}:`;
-  const retries = [...store.holds.values()].filter((hold) => hold.referenceId?.startsWith(prefix));
-  const reserved = [...retries].reverse().find((hold) => hold.status === "reserved");
-  if (reserved) return reserved.referenceId;
-  // 共享权益服务按 referenceId 幂等；已释放的同次尝试必须使用新序号才能再次预扣。
-  const sequence = retries.reduce((latest, hold) => Math.max(latest, Number(hold.referenceId.slice(prefix.length)) || 0), 0);
-  return `${prefix}${sequence + 1}`;
-}
-
-function nextAnalysisAttempt(analysis) {
-  return analysisAttempt(analysis) + 1;
-}
-
-function analysisAttempt(analysis) {
-  requireInput(Number.isInteger(analysis.attempt) && analysis.attempt >= 0,
-    "ANALYSIS_ATTEMPT_INVALID", "任务尝试次数无效", 409);
-  return analysis.attempt;
-}
-
-function findReservedHold(store, analysisId) {
-  return [...store.holds.values()].reverse().find((hold) => hold.status === "reserved" && belongsToAnalysis(hold, analysisId));
-}
-
-function findConfirmedHold(store, analysisId) {
-  return [...store.holds.values()].reverse().find((hold) => hold.status === "confirmed" && belongsToAnalysis(hold, analysisId));
-}
-
-function belongsToAnalysis(hold, analysisId) {
-  return hold.referenceId === analysisId || hold.referenceId?.startsWith(`${analysisId}:retry:`);
-}
-
-function isUsageDenied(error) {
-  return ["ANONYMOUS_TRIAL_USED", "ANONYMOUS_DURATION_EXCEEDED", "INSUFFICIENT_ENTITLEMENT"].includes(error.code);
-}
-
-function hasPersistedUsage(summary, owner) {
-  return sameOwner(summary?.owner, owner) && ["uploaded", "transcribing", "analyzing", "completed"].includes(summary.status);
-}
-
-function sameOwner(left, right) {
-  return left?.type === right?.type && left?.id === right?.id;
-}
-
-function removeMapRows(map, predicate) {
-  for (const [key, row] of map.entries()) if (predicate(row)) map.delete(key);
-}
-
 export function createRequestId() { return `req_${randomUUID()}`; }
-
-export function unknownProduct(code) {
-  if (!PRODUCTS[code]) throw new HttpError("UNKNOWN_PRODUCT", "未知商品", 400);
-  return PRODUCTS[code];
-}

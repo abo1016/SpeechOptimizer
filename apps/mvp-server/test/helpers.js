@@ -34,8 +34,11 @@ export async function api(fixture, path, options = {}) {
     body = JSON.stringify(body);
   }
   const response = await fetch(`${fixture.baseUrl}${path}`, { method: options.method ?? "GET", headers, body });
-  const payload = await response.json();
-  return { status: response.status, payload, cookie: response.headers.getSetCookie?.()[0] ?? response.headers.get("set-cookie") };
+  const bodyText = await response.text();
+  let payload;
+  try { payload = JSON.parse(bodyText); } catch { payload = null; }
+  return { status: response.status, payload, body: bodyText, headers: response.headers,
+    cookie: response.headers.getSetCookie?.()[0] ?? response.headers.get("set-cookie") };
 }
 
 export function wav(durationSeconds = 1) {

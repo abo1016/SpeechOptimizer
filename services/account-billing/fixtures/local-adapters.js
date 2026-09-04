@@ -22,16 +22,42 @@ export class MockWaffoGateway {
 
   async createOrder(input) {
     this.calls.push({ operation: "createOrder", input });
-    return { externalOrderId: `mock-${input.requestId}`, checkoutUrl: `http://localhost/mock-checkout/${input.requestId}` };
+    return {
+      acquiringOrderId: `mock-${input.requestId}`,
+      checkoutUrl: `http://localhost/mock-checkout/${input.requestId}`,
+    };
+  }
+
+  async createSubscription(input) {
+    this.calls.push({ operation: "createSubscription", input });
+    return {
+      externalSubscriptionId: `mock-subscription-${input.requestId}`,
+      checkoutUrl: `http://localhost/mock-checkout/${input.requestId}`,
+    };
+  }
+
+  async inquiryOrder(input) {
+    this.calls.push({ operation: "inquiryOrder", input });
+    return { status: "PENDING" };
+  }
+
+  async inquirySubscription(input) {
+    this.calls.push({ operation: "inquirySubscription", input });
+    return { status: "PENDING" };
   }
 
   async cancelSubscription(input) {
     this.calls.push({ operation: "cancelSubscription", input });
-    return { accepted: true };
+    return { externalSubscriptionId: input.externalSubscriptionId, status: "canceling" };
   }
 
   async refundOrder(input) {
     this.calls.push({ operation: "refundOrder", input });
-    return { accepted: true };
+    return { acquiringRefundOrderId: `mock-refund-${input.refundRequestId}` };
+  }
+
+  async inquiryRefund(input) {
+    this.calls.push({ operation: "inquiryRefund", input });
+    return { status: "REFUND_IN_PROGRESS" };
   }
 }

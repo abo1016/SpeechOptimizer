@@ -13,6 +13,8 @@ export async function createRuntime(options = {}) {
   const application = new MvpApplication({ config, store, providers, logger });
   // 恢复必须发生在 HTTP 服务对外提供请求前，确保快照和核心 JSON 数据库先达到一致。
   await application.recoverPendingAnalyses();
+  // 资金恢复只允许使用已有 request ID 做 inquiry，禁止启动阶段重放任何 Provider write。
+  await application.billing.reconcilePendingBilling();
   const server = createMvpServer({ application, config, logger });
   return { config, logger, store, providers, application, server };
 }
