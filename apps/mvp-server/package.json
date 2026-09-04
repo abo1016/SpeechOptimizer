@@ -1,0 +1,19 @@
+{
+  "name": "@speechoptimizer/mvp-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "SpeechOptimizer MVP 业务组合与 HTTP 服务",
+  "scripts": {
+    "start": "node src/index.js",
+    "check": "node scripts/check.mjs",
+    "test": "node --test test/*.test.js",
+    "build": "node scripts/build.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "@waffo/waffo-node": "3.0.1"
+  }
+}

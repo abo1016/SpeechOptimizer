@@ -1,0 +1,15 @@
+{
+  "name": "@speechoptimizer/core-platform",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "SpeechOptimizer MVP 本地核心平台服务",
+  "scripts": {
+    "check": "node scripts/check.mjs",
+    "test": "node --test",
+    "build": "node scripts/build.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

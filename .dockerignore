@@ -1,0 +1,26 @@
+# Git 历史和编辑器元数据不参与镜像构建，减少上下文体积并避免泄露本机信息。
+.git
+.DS_Store
+**/.DS_Store
+
+# 本地依赖、构建产物和缓存必须由容器构建步骤重新生成。
+node_modules
+**/node_modules
+dist
+**/dist
+.pnpm-store
+**/.vite
+
+# 本地运行数据、支付集成状态和开发输出可能包含机器状态或敏感信息，禁止进入镜像。
+.data
+**/.data
+.waffo
+outputs
+
+# API 镜像不需要前端、测试和本地基础设施文件。
+prototype
+**/test
+**/tests
+infra
+docs
+.github

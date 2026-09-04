@@ -1,0 +1,270 @@
+{
+  "schemaVersion": 2,
+  "skillVersion": "1.7.0",
+  "features": ["order", "refund", "subscription"],
+  "report": {
+    "project": "SpeechOptimizer",
+    "date": "2026-09-04",
+    "sdkVersion": "@waffo/waffo-node 3.0.1",
+    "environment": "Local Mock / Sandbox unverified",
+    "mid": "NOT_PROVISIONED",
+    "coverageBasis": "Local unit, contract, HTTP and SDK-shaped fixture tests",
+    "features": "Order Payment, Refund, Subscription, Webhook",
+    "integrationConfiguration": {
+      "userTerminal": "WEB candidate; human confirmation pending",
+      "checkoutSelection": "Waffo Hosted Checkout with full-page redirect",
+      "currencyMode": "Single currency: USD",
+      "subscriptionMode": "Human confirmation pending",
+      "subscriptionRetryPolicy": "Human confirmation pending",
+      "subscriptionEvents": "SUBSCRIPTION_STATUS_NOTIFICATION, SUBSCRIPTION_PERIOD_CHANGED_NOTIFICATION, PAYMENT_NOTIFICATION"
+    },
+    "projectSurface": {
+      "orderEndpoints": "POST /api/v1/billing/orders; GET /api/v1/billing/orders",
+      "refundEndpoints": "POST /api/v1/billing/orders/:id/refund",
+      "subscriptionEndpoints": "GET /api/v1/billing/subscriptions; POST /api/v1/billing/subscriptions/:id/cancel",
+      "configEndpoints": "GET /api/v1/plans",
+      "webhookEndpoint": "POST /api/v1/webhooks/waffo with raw body and SDK X-SIGNATURE verification",
+      "webhookBusinessLogic": "Normalize signed Waffo notifications, process idempotently, route subscription payments away from one-time fulfillment",
+      "persistence": "PersistentStore stores paymentRequestId, subscriptionRequest, subscriptionId, refundRequestId and refunds",
+      "credentials": "Environment variables only; production startup rejects missing or unresolved financial configuration",
+      "appTerminal": "No APP integration; Hosted Checkout full-page path only"
+    },
+    "webhookDelivery": [
+      {
+        "status": "PROJECT_SIDE_VERIFIED",
+        "detail": "Local SDK-shaped signed notifications verified signature-first, with duplicate and unknown-status failure cases",
+        "nextStep": "Run the same cases against Waffo Sandbox after credentials and webhook URL are confirmed"
+      }
+    ],
+    "apisExercised": [
+      { "capability": "Payment create", "operation": "order().create()", "evidence": "provider-adapters local contract tests" },
+      { "capability": "Payment inquiry", "operation": "order().inquiry()", "evidence": "same-key UnknownStatus recovery and startup reconciliation tests" },
+      { "capability": "Refund", "operation": "order().refund() and refund().inquiry()", "evidence": "provider-adapters and account-billing local contract tests" },
+      { "capability": "Subscription", "operation": "subscription().create/inquiry/cancel()", "evidence": "provider-adapters local contract tests" }
+    ],
+    "parameterCheck": {
+      "orderDescription": "Configured from server-side product metadata",
+      "goodsName": "Configured Waffo goodsName",
+      "goodsUrlOrAppName": "goodsUrl is required; no appName exemption assumed",
+      "noAppCase": "No mobile APP is integrated; goodsUrl is used",
+      "goodsUrl": "Server-side WAFFO_GOODS_URL; real production URL pending",
+      "appName": "N/A - no APP merchant path",
+      "userEmail": "Server-side authenticated account email",
+      "userTerminal": "WEB candidate; human confirmation pending",
+      "timeFields": "Adapter normalizes userCreatedAt to ISO-8601 UTC and webhook timestamps to milliseconds",
+      "nonCardFields": "Hosted Checkout selected; payment-method contract inquiry remains unverified"
+    },
+    "dataIntegrity": {
+      "idempotencyKeyPersisted": "BillingService persists request IDs before provider writes and persists outcomes after them",
+      "acquiringOrderIdStored": "Local order stores acquiringOrderId after confirmed create or inquiry",
+      "refundRequestIdPersisted": "Refund row and order reference are persisted before refund write",
+      "subscriptionIdsStored": "Local subscription stores subscriptionRequest and external subscriptionId",
+      "redirectUrls": "Success, failed and cancel URLs are server-side configuration; external URL validation remains pending"
+    },
+    "appTerminalAssessment": {
+      "hasApp": "No",
+      "checkoutLoadingMode": "Hosted Checkout full-page redirect",
+      "userTerminalApp": "N/A - no APP path",
+      "deviceWalletMethods": "Not verified without payMethodConfig inquiry and device coverage"
+    },
+    "goLive": {
+      "q1": { "status": "UNRESOLVED", "detail": "Go-Live Q1 requires human and deployment confirmation" },
+      "q2": { "status": "UNRESOLVED", "detail": "Go-Live Q2 requires human and DNS confirmation" },
+      "q3": { "status": "UNRESOLVED", "detail": "Go-Live Q3 requires human and hosting-region confirmation" },
+      "q4": { "status": "UNRESOLVED", "detail": "Go-Live Q4 requires payment-method contract confirmation" },
+      "q5": { "status": "UNRESOLVED", "detail": "Go-Live Q5 requires external checkout and iframe/device confirmation" }
+    },
+    "notes": "This manifest records local implementation evidence only. No real Waffo Sandbox request, payment-method inquiry, production Webhook delivery, or production credential has been exercised. Agent D was unavailable because of the account usage limit; the coordinator completed the scoped correction locally.",
+    "fixes": [
+      { "testId": "unknown-status-recovery", "rootCause": "A successful inquiry response was previously treated as proof of every write operation", "fixSummary": "Recovery now interprets operation-specific statuses and frozen result fields, and never performs a second write" },
+      { "testId": "subscription-amount-mismatch", "rootCause": "Subscription activation did not verify the local order payment facts", "fixSummary": "Activation and renewal now verify amount and currency before state mutation or grant" }
+    ],
+    "remediation": [
+      "Confirm userTerminal, subscription mode and retry policy before production startup.",
+      "Provide Sandbox credentials, MID, HTTPS notify/redirect URLs and payMethodConfig inquiry evidence.",
+      "Run project-endpoint integration verification and regenerate the formal report only after the report gate passes."
+    ]
+  },
+  "decisions": [
+    {
+      "id": "paymentSourceOfTruth",
+      "status": "CONFIRMED_BY_HUMAN",
+      "value": "Webhook is the payment source of truth; redirect is UX only",
+      "evidence": { "source": "user_message", "quote": "按推荐方案执" }
+    },
+    {
+      "id": "unknownStatusHandling",
+      "status": "CONFIRMED_BY_HUMAN",
+      "value": "Use same request ID inquiry after UnknownStatus and never invent a new write key",
+      "evidence": { "source": "user_message", "quote": "按推荐方案执" }
+    },
+    {
+      "id": "userTerminal",
+      "status": "UNRESOLVED",
+      "value": "WEB candidate; final human confirmation required"
+    },
+    {
+      "id": "checkoutOwnership",
+      "status": "CONFIRMED_BY_HUMAN",
+      "value": "Waffo Hosted Checkout with full-page redirect",
+      "evidence": { "source": "user_message", "quote": "按推荐方案执" }
+    },
+    {
+      "id": "currencyMode",
+      "status": "CONFIRMED_BY_HUMAN",
+      "value": "Single-currency USD",
+      "evidence": { "source": "user_message", "quote": "按推荐方案执" }
+    },
+    {
+      "id": "iframeDeviceWalletHandling",
+      "status": "UNRESOLVED",
+      "value": "No iframe/App path is implemented; device-wallet contract and coverage require confirmation"
+    },
+    {
+      "id": "redirectBehavior",
+      "status": "CONFIRMED_BY_HUMAN",
+      "value": "Redirects are UX only and never grant benefits",
+      "evidence": { "source": "user_message", "quote": "按推荐方案执" }
+    },
+    { "id": "goLiveQ1", "status": "UNRESOLVED", "value": "Human and deployment confirmation required" },
+    { "id": "goLiveQ2", "status": "UNRESOLVED", "value": "Human and DNS confirmation required" },
+    { "id": "goLiveQ3", "status": "UNRESOLVED", "value": "Human and hosting-region confirmation required" },
+    { "id": "goLiveQ4", "status": "UNRESOLVED", "value": "Payment-method contract confirmation required" },
+    { "id": "goLiveQ5", "status": "UNRESOLVED", "value": "External checkout confirmation required" },
+    { "id": "goLiveQ6", "status": "UNRESOLVED", "value": "APP scope confirmation required" },
+    { "id": "goLiveQ7", "status": "UNRESOLVED", "value": "Checkout loading-mode confirmation required" },
+    { "id": "goLiveQ8", "status": "UNRESOLVED", "value": "APP terminal confirmation required" },
+    { "id": "complianceExemption", "status": "UNRESOLVED", "value": "No exemption assumed; merchant confirmation required" },
+    {
+      "id": "onPaymentBusinessLogic",
+      "status": "CONFIRMED_BY_HUMAN",
+      "value": "One-time PAY_SUCCESS grants the matching product; subscription payment never uses that grant path",
+      "evidence": { "source": "user_message", "quote": "按推荐方案执" }
+    },
+    {
+      "id": "refundBenefitHandling",
+      "status": "CONFIRMED_BY_HUMAN",
+      "value": "Only fully unused one-time benefits are eligible for automatic refund; consumed or subscription refunds go to manual review",
+      "evidence": { "source": "user_message", "quote": "按推荐方案执" }
+    },
+    {
+      "id": "onRefundBusinessLogic",
+      "status": "CONFIRMED_BY_HUMAN",
+      "value": "Confirmed refund revokes only the remaining source benefits and cannot create negative balance",
+      "evidence": { "source": "user_message", "quote": "按推荐方案执" }
+    },
+    {
+      "id": "subscriptionMode",
+      "status": "UNRESOLVED",
+      "value": "Payment-first versus service-first contract behavior requires confirmation"
+    },
+    {
+      "id": "cancelBenefitTiming",
+      "status": "CONFIRMED_BY_HUMAN",
+      "value": "Cancellation takes effect at period end; current benefits remain active",
+      "evidence": { "source": "user_message", "quote": "按推荐方案执" }
+    },
+    {
+      "id": "subscriptionRetryConfig",
+      "status": "UNRESOLVED",
+      "value": "Retry count and interval require Waffo contract confirmation"
+    },
+    {
+      "id": "onSubscriptionStatusBusinessLogic",
+      "status": "CONFIRMED_BY_HUMAN",
+      "value": "Subscription status events manage lifecycle; activation grants only after payment facts are verified",
+      "evidence": { "source": "user_message", "quote": "按推荐方案执" }
+    },
+    {
+      "id": "onSubscriptionPeriodChangedBusinessLogic",
+      "status": "CONFIRMED_BY_HUMAN",
+      "value": "Period events grant the new cycle; yearly benefits are twelve independent monthly windows",
+      "evidence": { "source": "user_message", "quote": "按推荐方案执" }
+    }
+  ],
+  "currentRunId": "local-wave2-20260904-01",
+  "evidence": [
+    {
+      "id": "ev-wave2-account",
+      "runId": "local-wave2-20260904-01",
+      "kind": "test_log",
+      "summary": "account-billing: check/build exit 0; 33 of 33 tests passed",
+      "capturedAt": "2026-09-04T05:37:43Z"
+    },
+    {
+      "id": "ev-wave2-provider",
+      "runId": "local-wave2-20260904-01",
+      "kind": "test_log",
+      "summary": "provider-adapters: check/build exit 0; 38 of 38 tests passed",
+      "capturedAt": "2026-09-04T05:37:43Z"
+    },
+    {
+      "id": "ev-wave2-mvp",
+      "runId": "local-wave2-20260904-01",
+      "kind": "test_log",
+      "summary": "mvp-server: check/build exit 0; 34 of 34 HTTP and integration tests passed",
+      "capturedAt": "2026-09-04T05:37:43Z"
+    },
+    {
+      "id": "ev-wave2-boundary",
+      "runId": "local-wave2-20260904-01",
+      "kind": "review",
+      "summary": "Current local code includes operation-aware UnknownStatus recovery, fail-closed notification normalization, and account refund purge",
+      "capturedAt": "2026-09-04T05:37:43Z"
+    },
+    {
+      "id": "ev-external-blocker",
+      "runId": "local-wave2-20260904-01",
+      "kind": "environment",
+      "summary": "No Sandbox credentials, payMethodConfig inquiry, production endpoint, or external delivery evidence is available",
+      "capturedAt": "2026-09-04T05:37:43Z"
+    }
+  ],
+  "phases": {
+    "A": { "status": "CONDITIONAL", "evidenceIds": ["ev-wave2-mvp"], "reason": "Only local SDK-shaped HTTP fixtures were exercised", "nextStep": "Run Phase A through project endpoints against Sandbox" },
+    "B1": { "status": "CONDITIONAL", "evidenceIds": ["ev-wave2-provider"], "reason": "Provider mapping and recovery are locally tested without a real payment method", "nextStep": "Confirm and exercise an active Sandbox payment method" },
+    "B2": { "status": "N/A", "reason": "No active non-card method has been confirmed" },
+    "C1": { "status": "CONDITIONAL", "evidenceIds": ["ev-wave2-account", "ev-wave2-mvp"], "reason": "Refund persistence, inquiry and rollback are local-only evidence", "nextStep": "Run a real Sandbox refund and refund Webhook" },
+    "C2": { "status": "CONDITIONAL", "evidenceIds": ["ev-wave2-account", "ev-wave2-mvp"], "reason": "Subscription lifecycle is tested with local fixtures; retry contract and Sandbox are unresolved", "nextStep": "Confirm subscription mode/retry and exercise all required notifications" },
+    "D": { "status": "CONDITIONAL", "evidenceIds": ["ev-wave2-boundary"], "reason": "Local quality evidence exists, but external credentials and Go-Live decisions are missing", "nextStep": "Complete external validation and rerun report gate" }
+  },
+  "tests": [
+    { "id": "order-create", "status": "CONDITIONAL", "evidenceIds": ["ev-wave2-provider", "ev-wave2-mvp"], "details": "Local order create mapping and HTTP flow pass; no real paymentRequestId evidence", "reason": "Sandbox order creation not exercised", "nextStep": "Run with Sandbox credentials" },
+    { "id": "order-create-error", "status": "CONDITIONAL", "evidenceIds": ["ev-wave2-provider", "ev-wave2-account"], "details": "Provider failure and local failure persistence are covered", "reason": "External provider failure response not exercised", "nextStep": "Capture Sandbox error response" },
+    { "id": "payment-success", "status": "CONDITIONAL", "evidenceIds": ["ev-wave2-mvp"], "details": "Signed local payment success grants one-time benefits idempotently", "reason": "No real Waffo payment success", "nextStep": "Run signed Sandbox notification" },
+    { "id": "payment-failure", "status": "CONDITIONAL", "evidenceIds": ["ev-wave2-mvp"], "details": "Local failed payment keeps benefits unchanged", "reason": "No real Waffo payment failure", "nextStep": "Run Sandbox failure case" },
+    { "id": "webhook-idempotency", "status": "CONDITIONAL", "evidenceIds": ["ev-wave2-mvp"], "details": "Duplicate and stale local notifications are covered", "reason": "External delivery replay not exercised", "nextStep": "Replay a Sandbox notification through the public endpoint" },
+    { "id": "refund-success", "status": "CONDITIONAL", "evidenceIds": ["ev-wave2-account", "ev-wave2-mvp"], "details": "Refund request persistence and confirmed rollback are locally covered", "reason": "No real refund API response", "nextStep": "Run Sandbox refund" },
+    { "id": "refund-inquiry", "status": "CONDITIONAL", "evidenceIds": ["ev-wave2-provider", "ev-wave2-account"], "details": "Same-key refund inquiry and startup reconciliation are covered", "reason": "No real refund inquiry", "nextStep": "Run Sandbox inquiry" },
+    { "id": "refund-webhook", "status": "CONDITIONAL", "evidenceIds": ["ev-wave2-mvp"], "details": "Signed refund notification revokes only remaining source benefits", "reason": "No external refund notification", "nextStep": "Run Sandbox refund Webhook" },
+    { "id": "subscription-create", "status": "CONDITIONAL", "evidenceIds": ["ev-wave2-provider", "ev-wave2-mvp"], "details": "Subscription create and local record persistence are covered", "reason": "No real subscription create", "nextStep": "Run Sandbox subscription create" },
+    { "id": "subscription-inquiry", "status": "CONDITIONAL", "evidenceIds": ["ev-wave2-provider", "ev-wave2-account"], "details": "Subscription same-key inquiry and startup recovery are covered", "reason": "No real subscription inquiry", "nextStep": "Run Sandbox inquiry" },
+    { "id": "subscription-renewal", "status": "CONDITIONAL", "evidenceIds": ["ev-wave2-account", "ev-wave2-mvp"], "details": "Monthly and yearly period benefit windows are local-tested", "reason": "No real renewal event", "nextStep": "Run Sandbox renewal" },
+    { "id": "subscription-cancel", "status": "CONDITIONAL", "evidenceIds": ["ev-wave2-provider", "ev-wave2-account"], "details": "Cancel uses subscriptionId and preserves period-end benefit semantics", "reason": "No real cancel response", "nextStep": "Run Sandbox cancel and inquiry cases" },
+    { "id": "subscription-event-status", "status": "CONDITIONAL", "evidenceIds": ["ev-wave2-mvp"], "details": "ACTIVE and terminal status notifications are signature-tested", "reason": "No external subscription status delivery", "nextStep": "Run Sandbox status notifications" },
+    { "id": "subscription-event-period-changed", "status": "CONDITIONAL", "evidenceIds": ["ev-wave2-mvp"], "details": "Period-changed routing and amount/currency validation are covered", "reason": "No external period notification", "nextStep": "Run Sandbox period notification" },
+    { "id": "subscription-event-payment", "status": "CONDITIONAL", "evidenceIds": ["ev-wave2-mvp"], "details": "Subscription payment is recorded without one-time entitlement", "reason": "No external subscription payment notification", "nextStep": "Run Sandbox payment notification" }
+  ],
+  "payMethodInquiry": {
+    "status": "N/A",
+    "evidenceIds": ["ev-external-blocker"],
+    "activeMethods": [],
+    "reason": "Production Waffo client and merchant contract are not configured"
+  },
+  "payMethodCoverage": [],
+  "qualityFindings": [
+    { "id": "webhookSignatureVerification", "riskLevel": "PASS", "evidenceIds": ["ev-wave2-mvp"], "reviewAnchor": "apps/mvp-server/src/routes-billing.js", "finding": "SDK handleWebhook receives the raw body and X-SIGNATURE before normalized business processing", "recommendation": "Keep signature-first handling and repeat it in Sandbox", "evidence": "mvp-server signed Webhook integration tests" },
+    { "id": "idempotencyAndLocking", "riskLevel": "PASS", "evidenceIds": ["ev-wave2-account", "ev-wave2-mvp"], "reviewAnchor": "services/account-billing/src/billing-webhook-processor.js", "finding": "Duplicate event IDs are ignored and in-process queue serialization protects ordering", "recommendation": "Replace the in-process queue with a shared database claim when scaling beyond one instance", "evidence": "account-billing and mvp-server duplicate/stale tests" },
+    { "id": "unknownStatusRecovery", "riskLevel": "PASS", "evidenceIds": ["ev-wave2-provider", "ev-wave2-account"], "reviewAnchor": "packages/provider-adapters/src/waffo-gateway-support.js", "finding": "UnknownStatus uses the original key and operation-aware inquiry status; definite failures are not recovered as success", "recommendation": "Exercise the same matrix against Sandbox", "evidence": "provider-adapters recovery tests" },
+    { "id": "requestIdPersistence", "riskLevel": "PASS", "evidenceIds": ["ev-wave2-account", "ev-wave2-mvp"], "reviewAnchor": "services/account-billing/src/billing-service.js", "finding": "Order, subscription and refund request IDs are persisted before provider writes and outcomes are persisted after responses", "recommendation": "Keep the persistence callback inside the domain service", "evidence": "persist ordering and restart tests" },
+    { "id": "refundEntitlementRollback", "riskLevel": "PASS", "evidenceIds": ["ev-wave2-account", "ev-wave2-mvp"], "reviewAnchor": "services/account-billing/src/billing-webhook-processor.js", "finding": "Only remaining benefits from an unused one-time source are revoked; consumed and subscription refunds require manual review", "recommendation": "Verify partial refund policy after human confirmation", "evidence": "refund lifecycle tests" },
+    { "id": "subscriptionEventRouting", "riskLevel": "PASS", "evidenceIds": ["ev-wave2-account", "ev-wave2-mvp"], "reviewAnchor": "apps/mvp-server/src/waffo-webhook.js", "finding": "Subscription-aware payments route to payment facts and status/period events route to subscription lifecycle", "recommendation": "Confirm Waffo event payload variants in Sandbox", "evidence": "subscription routing and no-one-time-grant tests" },
+    { "id": "appIframeCheckoutRisk", "riskLevel": "N/A", "evidenceIds": ["ev-external-blocker"], "reviewAnchor": "apps/mvp-server/src/providers.js", "finding": "No APP or iframe checkout path is integrated in this MVP", "recommendation": "If APP or iframe is added, confirm userTerminal, referrer-policy and allow=payment before implementation", "evidence": "MVP scope and provider configuration review", "reason": "No APP/iframe feature selected or externally confirmed" }
+  ],
+  "blockers": [
+    { "id": "human-decisions", "status": "OPEN", "summary": "userTerminal, subscriptionMode, subscriptionRetryConfig, Go-Live Q1-Q8, device-wallet and compliance decisions are not confirmed" },
+    { "id": "external-waffo", "status": "OPEN", "summary": "Sandbox credentials, MID, payMethodConfig inquiry, HTTPS Webhook delivery and real payment/refund/subscription evidence are missing" }
+  ],
+  "mustFix": [],
+  "outcome": "INCOMPLETE"
+}

@@ -1,0 +1,16 @@
+{
+  "name": "@speechoptimizer/provider-adapters",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "SpeechOptimizer MVP 外部服务与媒体 provider 适配层",
+  "exports": "./src/index.js",
+  "scripts": {
+    "check": "node scripts/check.mjs",
+    "test": "node --test test/*.test.js",
+    "build": "node scripts/build.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

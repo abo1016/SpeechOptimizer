@@ -11,6 +11,18 @@ dist/
 **/dist/
 **/.vite/
 
+# 本地运行快照、上传文件与测试状态可能包含用户数据，只允许留在开发机器。
+.data/
+**/.data/
+
+# pnpm 的项目级 store 是可重建缓存，不纳入 Git checkpoint 或 Docker context。
+.pnpm-store/
+**/.pnpm-store/
+
+# Vercel CLI 本地链接信息包含个人/团队项目标识，只保留仓库级 vercel 配置，不提交本机链接目录。
+.vercel/
+**/.vercel/
+
 # 本地包管理器调试日志可能包含机器路径，仅保留可复现的锁文件。
 npm-debug.log*
 pnpm-debug.log*

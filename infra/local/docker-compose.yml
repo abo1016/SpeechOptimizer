@@ -1,0 +1,147 @@
+# SpeechOptimizer MVP 本地依赖编排文件。
+# 本文件只包含当前已确认需要的 PostgreSQL、MinIO 与邮件捕获服务，不引入 Redis。
+name: speechoptimizer-local
+
+services:
+  postgres:
+    # 固定主版本，避免开发机自动跨 PostgreSQL 大版本升级导致数据目录不兼容。
+    image: postgres:16-alpine
+    # 使用稳定容器名，便于开发者查看日志和执行本地诊断命令。
+    container_name: speechoptimizer-postgres
+    # 容器异常退出后自动恢复；手动停止时保持停止状态。
+    restart: unless-stopped
+    environment:
+      # 初始化数据库名称；允许通过同目录 .env 覆盖默认值。
+      POSTGRES_DB: ${POSTGRES_DB:-speechoptimizer}
+      # 初始化数据库管理员账号；仅用于本地开发，不得复用到生产环境。
+      POSTGRES_USER: ${POSTGRES_USER:-speechoptimizer}
+      # 初始化数据库管理员密码；默认值仅用于本机隔离环境。
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-speechoptimizer_local}
+    ports:
+      # 将 PostgreSQL 暴露到宿主机，供本地服务和数据库客户端连接。
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      # 保存数据库数据，停止或重建容器后仍保留本地开发记录。
+      - postgres_data:/var/lib/postgresql/data
+      # 首次创建数据卷时执行基础数据库初始化脚本。
+      - ./postgres/initdb/001-bootstrap.sql:/docker-entrypoint-initdb.d/001-bootstrap.sql:ro
+      # 首次创建数据卷时执行基线迁移，后续迁移应由正式迁移工具执行。
+      - ./postgres/migrations/0001-infrastructure-baseline.sql:/docker-entrypoint-initdb.d/010-infrastructure-baseline.sql:ro
+    healthcheck:
+      # 使用容器内 pg_isready 验证目标数据库已接受连接。
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      # 健康检查每五秒执行一次，兼顾启动速度和本地资源占用。
+      interval: 5s
+      # 单次检查最多等待五秒，避免无响应进程长期占用检查任务。
+      timeout: 5s
+      # 连续失败十次后标记服务不健康。
+      retries: 10
+      # 首次启动时给予数据库十秒初始化时间。
+      start_period: 10s
+
+  minio:
+    # 使用明确版本，确保本地 S3 兼容行为可重复。
+    image: minio/minio:RELEASE.2025-07-23T15-54-02Z
+    # 使用稳定容器名，方便脚本和开发者读取日志。
+    container_name: speechoptimizer-minio
+    # 容器异常退出后自动恢复；手动停止时保持停止状态。
+    restart: unless-stopped
+    # 启动对象存储 API，并在独立端口提供管理控制台。
+    command: server /data --console-address ":9001"
+    environment:
+      # MinIO 本地管理员账号；只允许用于本地开发环境。
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-speechoptimizer}
+      # MinIO 本地管理员密码；默认值不得用于生产环境。
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-speechoptimizer_local}
+    ports:
+      # S3 兼容 API 端口，供应用上传和读取音频对象。
+      - "${MINIO_API_PORT:-9000}:9000"
+      # MinIO 管理控制台端口，仅供本地调试使用。
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      # 保存上传对象，停止或重建容器后仍保留本地开发数据。
+      - minio_data:/data
+    healthcheck:
+      # 调用 MinIO 官方存活探针，确认 HTTP 服务已可用。
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      # 健康检查每五秒执行一次。
+      interval: 5s
+      # 单次检查最多等待五秒。
+      timeout: 5s
+      # 连续失败十次后标记服务不健康。
+      retries: 10
+      # 首次启动时给予对象存储五秒初始化时间。
+      start_period: 5s
+
+  minio-init:
+    # 使用与 MinIO 服务兼容的官方客户端镜像执行一次性桶初始化。
+    image: minio/mc:RELEASE.2025-07-21T05-28-08Z
+    # 初始化任务成功后无需重启；失败会保留日志供开发者诊断。
+    restart: "no"
+    depends_on:
+      minio:
+        # 仅在 MinIO 健康后创建桶，避免依赖固定时长等待。
+        condition: service_healthy
+    environment:
+      # 将本地管理员账号传给初始化脚本建立临时连接别名。
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-speechoptimizer}
+      # 将本地管理员密码传给初始化脚本建立临时连接别名。
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-speechoptimizer_local}
+      # 指定应用音频桶名称，允许同目录 .env 覆盖。
+      MINIO_BUCKET: ${MINIO_BUCKET:-speechoptimizer-audio}
+    entrypoint:
+      # 使用 POSIX shell 顺序执行别名配置与幂等建桶命令。
+      - /bin/sh
+      # 遇到任意命令失败立即退出，使 Compose 能准确报告初始化失败。
+      - -ec
+      # 建立本地别名后幂等创建私有桶；不配置匿名读取权限。
+      - >-
+        mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}";
+        mc mb --ignore-existing "local/$${MINIO_BUCKET}";
+        mc anonymous set none "local/$${MINIO_BUCKET}"
+
+  mailpit:
+    # Mailpit 同时提供 SMTP 接收器和浏览器邮件查看界面。
+    image: axllent/mailpit:v1.27.8
+    # 使用稳定容器名，便于读取邮件捕获服务日志。
+    container_name: speechoptimizer-mailpit
+    # 容器异常退出后自动恢复；手动停止时保持停止状态。
+    restart: unless-stopped
+    environment:
+      # 限制本地保留邮件数量，避免长期开发持续占用磁盘。
+      MP_MAX_MESSAGES: ${MAILPIT_MAX_MESSAGES:-500}
+      # 将数据写入挂载目录，使重建容器后仍可检查历史测试邮件。
+      MP_DATABASE: /data/mailpit.db
+    ports:
+      # SMTP 端口，供 Magic Link 和通知邮件适配器连接。
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+      # Web 管理界面端口，供开发者查看捕获到的邮件。
+      - "${MAILPIT_WEB_PORT:-8025}:8025"
+    volumes:
+      # 保存本地捕获邮件，停止或重建容器后仍保留记录。
+      - mailpit_data:/data
+    healthcheck:
+      # 调用 Mailpit 存活接口，确认 Web 与后端服务已启动。
+      test: ["CMD", "/mailpit", "readyz"]
+      # 健康检查每五秒执行一次。
+      interval: 5s
+      # 单次检查最多等待五秒。
+      timeout: 5s
+      # 连续失败十次后标记服务不健康。
+      retries: 10
+      # 首次启动时给予邮件服务五秒初始化时间。
+      start_period: 5s
+
+volumes:
+  # PostgreSQL 命名卷保存关系型数据。
+  postgres_data:
+    # 使用 Docker 默认 local 驱动，保持零额外依赖。
+    driver: local
+  # MinIO 命名卷保存音频对象。
+  minio_data:
+    # 使用 Docker 默认 local 驱动，保持零额外依赖。
+    driver: local
+  # Mailpit 命名卷保存捕获到的测试邮件。
+  mailpit_data:
+    # 使用 Docker 默认 local 驱动，保持零额外依赖。
+    driver: local

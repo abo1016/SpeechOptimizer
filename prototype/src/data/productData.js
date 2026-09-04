@@ -49,54 +49,7 @@ export const feedbackPreview = [
   },
 ];
 
-export const sessions = [
-  { title: "YouTube Short — Clearer openings", date: "Aug 30, 2026", duration: "1:42", score: 78, status: "Good" },
-  { title: "Podcast intro — Episode 23", date: "Aug 28, 2026", duration: "1:18", score: 62, status: "Needs work" },
-  { title: "Creator update — Product launch", date: "Aug 24, 2026", duration: "1:56", score: 85, status: "Great" },
-];
-
-export const priorities = [
-  {
-    rank: "01",
-    title: "Land the opening sooner",
-    finding: "Your main point arrives 18 seconds into a 92-second take.",
-    action: "State the outcome in your first sentence, then add context.",
-    cue: "Try: “Three small changes made my videos easier to follow.”",
-    tone: "blue",
-  },
-  {
-    rank: "02",
-    title: "Replace fillers with a beat",
-    finding: "You used 8 fillers, mostly before transitions.",
-    action: "Leave a short silent beat before each new point.",
-    cue: "Re-record the transition at 00:34 without “um.”",
-    tone: "amber",
-  },
-  {
-    rank: "03",
-    title: "Slow the final third",
-    finding: "Your pace rises from 142 to 171 WPM after 01:02.",
-    action: "Shorten the last two sentences and stress the key verbs.",
-    cue: "Aim for 145 WPM from 01:02 to the end.",
-    tone: "green",
-  },
-];
-
-export const metrics = [
-  { label: "Speaking rate", value: "154", unit: "WPM", state: "Slightly fast" },
-  { label: "Filler words", value: "8", unit: "total", state: "5.2 per min" },
-  { label: "Long pauses", value: "4", unit: "over 3s", state: "Review" },
-  { label: "Effective speech", value: "1:19", unit: "of 1:32", state: "86%" },
-];
-
-export const comparisonMetrics = [
-  { label: "Speaking rate", before: "171 WPM", after: "146 WPM", delta: "Closer to target" },
-  { label: "Filler words", before: "8", after: "3", delta: "5 fewer" },
-  { label: "Long pauses", before: "4", after: "2", delta: "2 fewer" },
-  { label: "Effective speech", before: "86%", after: "89%", delta: "+3%" },
-];
-
-// 次级页面集中定义，便于后续替换为正式路由组件或真实内容。
+// 次级页面只集中维护信息架构；业务数据由各页面的真实 API 请求提供。
 export const routeTable = {
   "/history": { kind: "history", title: "History", eyebrow: "Your sessions" },
   "/pricing": { kind: "pricing", title: "Choose how you practice", eyebrow: "Plans" },

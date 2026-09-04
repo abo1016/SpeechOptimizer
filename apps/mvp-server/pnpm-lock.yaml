@@ -1,0 +1,23 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      '@waffo/waffo-node':
+        specifier: 3.0.1
+        version: 3.0.1
+
+packages:
+
+  '@waffo/waffo-node@3.0.1':
+    resolution: {integrity: sha512-NjQlVTDpp70DoZwcdtN2v46hc2z6E5QBWpeYRAgTQcpBevs1X+cvVsGYwE+jiJQYQO5ncwH1mb1yWWQpoAlChA==}
+    engines: {node: '>=18.0.0'}
+
+snapshots:
+
+  '@waffo/waffo-node@3.0.1': {}

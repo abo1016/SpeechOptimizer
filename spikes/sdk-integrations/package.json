@@ -1,0 +1,12 @@
+{
+  "name": "speechoptimizer-sdk-integrations",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "SpeechOptimizer 外接服务 SDK 与业务适配 Spike（仅使用本地 mock transport）",
+  "scripts": {
+    "check": "node --check src/errors.js && node --check src/waffo-client.js && node --check src/payment-service.js && node --check src/webhook.js",
+    "test": "node --test",
+    "build": "node scripts/build.mjs"
+  }
+}
