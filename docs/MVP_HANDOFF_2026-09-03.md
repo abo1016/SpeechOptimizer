@@ -1,12 +1,12 @@
 # SpeechOptimizer MVP 当前开发交接
 
 > 交接日期：2026-09-03（Asia/Shanghai）
-> 最近更新：2026-09-04（Asia/Shanghai）。PR #1 已于 2026-09-04 合并，合并提交为 `1c38e65a6c88212225fea4c70587b33a3f9ffb78`；线上部署使用的部署修复提交 `3a912b7` 已推送到 `codex/cicd-bootstrap`，但尚未合入 `main`。Sites 与 Railway 已完成可浏览器验收的 Demo/Mock 部署；生产 Release 仍关闭。
+> 最近更新：2026-09-04（Asia/Shanghai）。PR #1 已于 2026-09-04 合并，合并提交为 `1c38e65a6c88212225fea4c70587b33a3f9ffb78`；[PR #2](https://github.com/abo1016/SpeechOptimizer/pull/2) 是将线上部署修复提交 `3a912b7` 与交接文档提交 `deeeca3` 同步到 `main` 的既定路径，合并后 `main` 将包含部署与文档提交。Sites 与 Railway 已完成可浏览器验收的 Demo/Mock 部署；生产 Release 仍关闭。
 > 工作区：`/Users/bopop/Documents/SpeechOptimizer`
 > Git 分支：`codex/cicd-bootstrap`
-> 远端同步：当前部署分支已推送到 `origin/codex/cicd-bootstrap`；`main` 的合并状态以远端合并提交 `1c38e65` 为准。
+> 远端同步：当前部署分支已推送到 `origin/codex/cicd-bootstrap`；PR #2 是部署与文档同步到 `main` 的当前路径，合并后以其远端合并提交和 `main` CI 为准。
 > 最近核验：Sites 部署状态为成功，主站启用 owner-only 登录保护；Railway API `/health` 返回 HTTP 200，模式为 `mock`，数据目录为 `/var/lib/speechoptimizer`。自定义域名 `app.bo-pop.top` 的 Sites `status`、`provider_status`、`ssl_status` 均为 `active`，匿名公网访问返回 HTTP 401 登录门槛，不再是 404。主站、API、持久卷和同源 API 代理均已上线。
-> 当前状态：**SpeechOptimizer 已完成可浏览器验收的 Demo/Mock 部署**，前端、API、Railway 持久卷和同源 `/api/*`、`/health` 代理均已上线；模型、支付、邮件、Google OAuth、生产数据库/对象存储、可观测性等外部依赖仍未接入，不应将当前状态表述为完整生产模式。线上使用的 4 个部署文件变更已由 `3a912b7` 推送到部署分支，尚未合入 `main`；根目录 `AGENTS.md` 删除仍是任务外用户改动。
+> 当前状态：**SpeechOptimizer 已完成可浏览器验收的 Demo/Mock 部署**，前端、API、Railway 持久卷和同源 `/api/*`、`/health` 代理均已上线；模型、支付、邮件、Google OAuth、生产数据库/对象存储、可观测性等外部依赖仍未接入，不应将当前状态表述为完整生产模式。PR #2 是将 `3a912b7` 的 4 个部署文件变更与 `deeeca3` 的文档回写同步到 `main` 的既定路径；合并后 `main` 将包含二者。根目录 `AGENTS.md` 删除仍是任务外用户改动。
 
 ## 0. Canonical Handoff State
 
@@ -15,18 +15,18 @@
 | Field | Current State |
 | --- | --- |
 | **Goal** | 完成 SpeechOptimizer 整个 MVP，并达到当前代码、测试、HTTP、浏览器和上线边界可审计的交付质量；在不伪造外部证据的前提下完成 Waffo 官方 Node SDK 3.0.1 集成，并按第 15.16 节继续上线链。 |
-| **Current Phase** | 可浏览器验收的 Sites + Railway Demo/Mock 部署已完成；PR #1 已合并，但包含 4 个部署文件变更的 `3a912b7` 目前仍只在 `codex/cicd-bootstrap`，尚未合入 `main`。 |
-| **Current Objective** | 保持当前单实例 Mock 部署可验收；完成部署分支与 `main` 的源码同步决策，再按外部依赖准备情况接入真实模型、邮件、OAuth、支付、数据库/对象存储与可观测性。Vercel Release 流程保留为遗留/备用路径，未经 owner 决策不修改。 |
-| **Completed** | Sites 主站、同源 API 代理、Railway `speechoptimizer-api`、500 MB 持久卷和 Mock 全链路已上线；主站 owner-only 登录保护、Railway `/health` HTTP 200、`app.bo-pop.top` 域名状态及匿名 401 门槛均已核验。PR #1 于 2026-09-04 以合并提交 `1c38e65` 合并；部署源码提交 `3a912b7` 已推送到 `codex/cicd-bootstrap`。 |
-| **In Progress** | 线上仍为 `mock` 模式，真实模型/支付/邮件/OAuth/生产数据层和监控尚未配置；4 个部署文件变更尚未合入 `main`。根目录 `AGENTS.md` 删除继续保持未暂存，不得带入部署提交。 |
-| **Next** | 1）由 owner 决定是否将 `3a912b7` 合入 `main`；2）保持当前单实例 Railway volume 部署并继续监控 `/health`；3）补齐真实 OpenAI、邮件、Google OAuth、Waffo、数据库/对象存储、备份和监控；4）真实依赖就绪后再做 staging/production E2E；5）如需启用 Vercel Release，先由 owner 明确其作为主路径还是备用路径。 |
-| **Blockers** | **部署运行：无当前阻塞，Mock 全链路已通过。** **完整生产模式：** OpenAI/SMTP/Google/Waffo 凭证与业务决策、生产数据库/对象存储、备份和监控仍不完整。**源码同步：** `3a912b7` 尚未合入 `main`，需 owner 决定合并路径。 |
+| **Current Phase** | 可浏览器验收的 Sites + Railway Demo/Mock 部署已完成；PR #2 是将 `3a912b7` 部署变更与 `deeeca3` 文档回写同步到 `main` 的既定路径，合并后 `main` 将包含二者。 |
+| **Current Objective** | 保持当前单实例 Mock 部署可验收；完成 PR #2 的检查与合并后核验 `main`，再按外部依赖准备情况接入真实模型、邮件、OAuth、支付、数据库/对象存储与可观测性。Vercel Release 流程保留为遗留/备用路径，未经 owner 决策不修改。 |
+| **Completed** | Sites 主站、同源 API 代理、Railway `speechoptimizer-api`、500 MB 持久卷和 Mock 全链路已上线；主站 owner-only 登录保护、Railway `/health` HTTP 200、`app.bo-pop.top` 域名状态及匿名 401 门槛均已核验。PR #1 于 2026-09-04 以合并提交 `1c38e65` 合并；部署源码提交 `3a912b7` 与文档提交 `deeeca3` 已推送到 `codex/cicd-bootstrap`。 |
+| **In Progress** | 线上仍为 `mock` 模式，真实模型/支付/邮件/OAuth/生产数据层和监控尚未配置；PR #2 正在完成部署与文档同步。根目录 `AGENTS.md` 删除继续保持未暂存，不得带入部署提交。 |
+| **Next** | 1）完成 PR #2 的检查与合并，并核验 `main` CI；2）保持当前单实例 Railway volume 部署并继续监控 `/health`；3）补齐真实 OpenAI、邮件、Google OAuth、Waffo、数据库/对象存储、备份和监控；4）真实依赖就绪后再做 staging/production E2E；5）如需启用 Vercel Release，先由 owner 明确其作为主路径还是备用路径。 |
+| **Blockers** | **部署运行：无当前阻塞，Mock 全链路已通过。** **完整生产模式：** OpenAI/SMTP/Google/Waffo 凭证与业务决策、生产数据库/对象存储、备份和监控仍不完整。**源码同步：** PR #2 是既定同步路径，合并后 `main` 将包含 `3a912b7` 与 `deeeca3`。 |
 | **Architecture Decisions** | 既有域名/Supabase/单实例持久卷决定保持。Release 新增：workflow_run 必须验证 CI success + push + main，并 checkout 对应 immutable SHA；人工发布仅 main；生产开关默认关闭；GHCR 和 Vercel 独立 job 共享同一 verify gate；Vercel 使用固定 59.11.2 + prebuilt production deploy；checkout 不持久化凭证。 |
 | **Failed Attempts** | 既有历史与 Luna 通道失败见 15.13。Actions run `33868265419` 使用 `pnpm/action-setup@v6` 后在 Setup pnpm 卡住超过两分钟；官方 release 已声明该 action 由 `pnpm/setup` 继任，因此主动取消该 run，不再重试旧 action。切换 `pnpm/setup@v2` 后恢复正常。 |
-| **Verification** | **本地：** 常规与 UTC 完整质量门禁各 `165/165`；原型测试 `21/21`、Sites Worker `6/6`、生产构建与 `git diff --check` 通过。**线上：** Railway 创建匿名会话、分析任务、WAV 上传、报告获取和删除链路通过；真实 Chrome 已验证上传合成 WAV、分析、报告跳转及指标展示；最终 `/health` HTTP 200。历史 GitHub CI run `33868583632` SUCCESS 且 annotations `[]`，不替代当前线上验收。 |
-| **Git State** | Branch `codex/cicd-bootstrap`；部署源码提交 `3a912b7` 已推送；PR #1 已于 2026-09-04 合并，merge commit `1c38e65a6c88212225fea4c70587b33a3f9ffb78`。4 个部署文件变更仍未合入 `main`；任务外 `AGENTS.md` 删除仍未暂存、未进入任何 commit。 |
+| **Verification** | **本次 PR #2 本地：** 常规与 UTC 完整质量门禁、原型生产构建、`git diff --check` 通过；Sites Worker `8/8`。**历史部署核验：** 常规与 UTC 完整质量门禁各 `165/165`、原型测试 `21/21`、Sites Worker `6/6`，以及 Railway 创建匿名会话、分析任务、WAV 上传、报告获取和删除链路均通过；真实 Chrome 已验证上传合成 WAV、分析、报告跳转及指标展示；最终 `/health` HTTP 200。历史 GitHub CI run `33868583632` SUCCESS 且 annotations `[]`，不替代当前线上验收。 |
+| **Git State** | Branch `codex/cicd-bootstrap`；部署源码提交 `3a912b7` 与文档提交 `deeeca3` 已推送；PR #1 已于 2026-09-04 合并，merge commit `1c38e65a6c88212225fea4c70587b33a3f9ffb78`。PR #2 是将部署与文档同步到 `main` 的既定路径，合并后以 `main` CI 核验；任务外 `AGENTS.md` 删除仍未暂存、未进入任何 commit。 |
 | **Important Files** | `AGENTS.md`（tracked 但当前工作树已删除，需 owner 确认意图）；`docs/MVP_HANDOFF_2026-09-03.md`（恢复入口：第 0 节 + 15.16）；`docs/DEPLOYMENT.md`；`apps/mvp-server/Dockerfile`、`prototype/.openai/hosting.json`、`prototype/worker/index.js`、`prototype/tests/sites-worker.test.mjs`（线上部署变更）；以及 `.github/workflows/{ci.yml,release.yml}`、`.waffo/integration-manifest.json` 与 MVP/Waffo 关键源码。 |
-| **Session Summary** | 2026-09-04：完成 Sites + Railway Demo/Mock 部署、持久卷、同源代理、域名和浏览器端验收；PR #1 已合并，部署源码提交 `3a912b7` 已推送到 `codex/cicd-bootstrap`，当前文档正在回写线上事实。 |
+| **Session Summary** | 2026-09-04：完成 Sites + Railway Demo/Mock 部署、持久卷、同源代理、域名和浏览器端验收；PR #1 已合并，部署源码提交 `3a912b7` 与文档提交 `deeeca3` 已推送到 `codex/cicd-bootstrap`；PR #2 是同步到 `main` 的既定路径。 |
 
 ## 1. 交接结论
 
@@ -55,9 +55,9 @@
 
 ### 3.1 Git 与本地运行时文件
 
-- 当前分支：`codex/cicd-bootstrap`；线上部署源码提交为 `3a912b7`，已推送到该分支。
+- 当前分支：`codex/cicd-bootstrap`；线上部署源码提交为 `3a912b7`，文档回写提交为 `deeeca3`，均已推送到该分支；PR #2 是同步到 `main` 的既定路径，合并后 `main` 将包含二者。
 - 已确认远端：`origin` 指向 `https://github.com/abo1016/SpeechOptimizer.git`。
-- PR #1 已于 2026-09-04 合并，合并提交为 `1c38e65`；部署提交 `3a912b7` 尚未合入 `main`。本文档同步提交和推送由 owner 明确授权后执行。
+- PR #1 已于 2026-09-04 合并，合并提交为 `1c38e65`；PR #2 是将部署提交 `3a912b7` 和文档提交 `deeeca3` 同步到 `main` 的既定路径，合并后 `main` 将包含二者。
 - `prototype/src/App.jsx`、`AppShell.jsx`、`RecorderWorkspace.jsx`、各页面和 `main.jsx` 是已修改的既有文件。
 - `apps/`、`packages/`、`services/`、`spikes/`、`infra/`、`scripts/`、`prototype/src/` 与 `prototype/tests/` 当前已由提交 `d1432f3` 跟踪；此前“从 stash 恢复的大量未跟踪源码”属于 superseded historical state，不应据此判断当前 diff。
 - `.data/`、`apps/mvp-server/.data/` 和 `.pnpm-store/` 是本地运行/测试状态或依赖状态，不应作为代码审查结论，也不要用删除工作区的方式“清理”。
@@ -250,7 +250,7 @@ node /Users/bopop/.codex/skills/waffo-integrate/bin/waffo-verify.js . --json
 | 等级 | 风险 | 处理/后续 |
 | --- | --- | --- |
 | 已解除 | Sites + Railway Demo/Mock 部署 | 主站、同源代理、Railway API、500 MB 持久卷和 `app.bo-pop.top` 已完成平台状态、HTTP 健康和浏览器验收；API 当前为 `mock`。 |
-| 需要 owner 决策 | 部署源码与 `main` 尚未完全同步 | 线上 4 个部署文件变更由 `3a912b7` 推送到 `codex/cicd-bootstrap`，PR #1 已合并但该部署提交尚未合入 `main`；是否合入由 owner 决定。 |
+| 进行中 | PR #2 源码同步 | 线上 4 个部署文件变更由 `3a912b7` 承载，文档回写由 `deeeca3` 承载；PR #2 是同步到 `main` 的既定路径，合并后 `main` 将包含部署与文档提交。 |
 | BLOCKER（完整生产模式） | 真实模型、邮件、Google OAuth、Waffo 和生产数据层尚未配置 | 当前 Demo/Mock 部署不受阻；接入真实 Provider 前需要凭证、预算/限流、业务决策、staging E2E、Postgres/对象存储迁移和备份策略。 |
 | MAJOR | 当前 JSON/音频本地持久化仍依赖单实例 Railway volume | 在实现并验证 Supabase Postgres/S3 adapter、跨实例幂等和迁移前，不要增加 replica 或移除 `/var/lib/speechoptimizer` volume。 |
 | MAJOR（后续可选） | Vercel Release 流程与当前 Sites 主路径并行存在 | `.github/workflows/release.yml` 的 Vercel job 是遗留/备用路径；未经 owner 决策不修改、启用或将其当作当前主站发布链。 |
@@ -265,7 +265,7 @@ node /Users/bopop/.codex/skills/waffo-integrate/bin/waffo-verify.js . --json
 当前部署已经完成，后续接手按以下顺序推进；不要把历史章节中的“首次部署”步骤重新执行：
 
 1. 先核对第 0 节与第 15.16 节，再检查分支和工作区；保留根目录 `AGENTS.md` 删除状态，不要将其纳入提交。
-2. 由 owner 决定是否把部署源码提交 `3a912b7` 合入 `main`；合并前确认 4 个文件边界和相关门禁，不要通过重写历史或恢复用户文件解决同步问题。
+2. 完成 PR #2 的检查与合并，并核验 `main` CI；合并前确认部署、代理校验和文档文件边界，不要通过重写历史或恢复用户文件解决同步问题。
 3. 保持现有 Railway `speechoptimizer-api` 单实例与 `/var/lib/speechoptimizer` volume，用 `/health`、平台日志和浏览器报告监控当前 Mock 运行态。
 4. 真实 Provider 就绪后，先在 staging 配置 OpenAI、邮件、Google OAuth、Waffo 及对应 CORS/回调，再执行真实 E2E；不要将 Mock 结果当作生产证据。
 5. 实现并验证 Supabase Postgres/S3 adapter、迁移、备份和跨实例幂等后，才评估移除本地 volume 或增加 replica。
@@ -1497,9 +1497,9 @@ annotations: []
 
 所有 setup、逐包依赖安装、常规门禁、UTC 门禁和 diff check 均通过。Release workflow 没有被执行，因为 production variable 仍不存在；Docker action 的实际 push 与 Vercel CLI 部署仍需未来受控 Release 验证。
 
-### 15.16 2026-09-04 Sites + Railway Demo/Mock 部署与源码同步 checkpoint（当前最新）
+### 15.16 2026-09-04 Sites + Railway Demo/Mock 部署与 PR #2 源码同步 checkpoint（当前最新）
 
-本节 supersede 前文所有关于“PR #1 尚未合并、Railway 尚未部署、Sites/域名未上线、`active_redeploying` 或公网 404”的当前状态描述。前文保留为按时间记录的历史证据；恢复任务时优先读取第 0 节、本节和 `docs/DEPLOYMENT.md` 的当前状态章节。
+本节 supersede 前文所有关于“PR #1 尚未合并、Railway 尚未部署、Sites/域名未上线、`active_redeploying`、公网 404、`3a912b7` 尚未合入 `main` 或等待 owner 决定同步路径”的当前状态描述。前文保留为按时间记录的历史证据；恢复任务时优先读取第 0 节、本节和 `docs/DEPLOYMENT.md` 的当前状态章节。
 
 #### 15.16.1 线上部署事实
 
@@ -1514,7 +1514,7 @@ annotations: []
 #### 15.16.2 源码、PR 与分支边界
 
 - PR #1 已于 2026-09-04 合并，合并提交为 `1c38e65a6c88212225fea4c70587b33a3f9ffb78`。
-- 线上部署需要的 4 个文件变更由提交 `3a912b799ae1e01f5cae6fd5c6d0d87a39c9f82a`（短 SHA `3a912b7`，消息 `fix(deploy): 完善 Railway 与 Sites 部署配置`）承载，已推送到 `origin/codex/cicd-bootstrap`；该提交尚未合入 `main`。这 4 个文件是：
+- 线上部署需要的 4 个文件变更由提交 `3a912b799ae1e01f5cae6fd5c6d0d87a39c9f82a`（短 SHA `3a912b7`，消息 `fix(deploy): 完善 Railway 与 Sites 部署配置`）承载，交接文档回写由 `deeeca308d9fb4fe6bfa52048dc7c78e1ef5b105`（短 SHA `deeeca3`）承载，均已推送到 `origin/codex/cicd-bootstrap`；PR #2 是同步到 `main` 的既定路径，合并后 `main` 将包含部署与文档提交。这 4 个文件是：
   - `apps/mvp-server/Dockerfile`
   - `prototype/.openai/hosting.json`
   - `prototype/worker/index.js`
@@ -1524,6 +1524,6 @@ annotations: []
 
 #### 15.16.3 验收与后续边界
 
-已执行并通过的项目验收包括：主质量门禁 `165/165`、UTC 时区质量门禁 `165/165`、约 163 项项目测试、Sites Worker `6/6`、前端生产构建、`git diff --check`、Railway API 全链路（匿名会话、分析任务、WAV 上传、报告获取、删除测试数据）以及真实 Chrome 主链路。当前仍为 Demo/Mock 部署，下一阶段需要 owner 决定是否将 `3a912b7` 合入 `main`，并另行准备 OpenAI、支付、邮件、Google OAuth、生产数据库/对象存储、备份和可观测性。
+历史部署验收已通过主质量门禁 `165/165`、UTC 时区质量门禁 `165/165`、约 163 项项目测试、Sites Worker `6/6`、前端生产构建、`git diff --check`、Railway API 全链路（匿名会话、分析任务、WAV 上传、报告获取、删除测试数据）以及真实 Chrome 主链路。本次 PR #2 重新通过常规与 UTC 完整质量门禁、前端生产构建、`git diff --check`，并将 Sites Worker 覆盖提升至 `8/8`。当前仍为 Demo/Mock 部署；PR #2 合并后，`main` 将包含 `3a912b7` 部署变更与 `deeeca3` 文档回写。下一阶段另行准备 OpenAI、支付、邮件、Google OAuth、生产数据库/对象存储、备份和可观测性。
 
 现有 `.github/workflows/release.yml` 仍包含 Vercel production release 流程；它是遗留/备用路径，不代表当前 Sites 主站的发布路径。未经 owner 明确决策，不修改、启用或替换该 Vercel 流程。

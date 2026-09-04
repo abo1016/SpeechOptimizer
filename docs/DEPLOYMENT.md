@@ -1,6 +1,6 @@
 # SpeechOptimizer MVP 上线与部署准备
 
-> 当前状态（2026-09-04）：Sites 前端、同源 `/api/*` 与 `/health` 代理、Railway `speechoptimizer-api` 和 `/var/lib/speechoptimizer` 持久卷已完成可浏览器验收的 Demo/Mock 部署。Sites 主站为 owner-only；自定义域名 `app.bo-pop.top` 的 `status`、`provider_status`、`ssl_status` 均为 `active`，匿名公网访问返回 HTTP 401 登录门槛。Railway `/health` 返回 HTTP 200，模式为 `mock`。线上部署所需 4 个文件变更已由 `3a912b7` 推送到 `codex/cicd-bootstrap`，尚未合入 `main`；PR #1 已于 2026-09-04 以合并提交 `1c38e65` 合并。完整生产模式仍需真实模型、支付、邮件、OAuth、数据库/对象存储和可观测性等外部依赖。远程初始化记录详见第 11 节，当前线上事实详见第 12 节。
+> 当前状态（2026-09-04）：Sites 前端、同源 `/api/*` 与 `/health` 代理、Railway `speechoptimizer-api` 和 `/var/lib/speechoptimizer` 持久卷已完成可浏览器验收的 Demo/Mock 部署。Sites 主站为 owner-only；自定义域名 `app.bo-pop.top` 的 `status`、`provider_status`、`ssl_status` 均为 `active`，匿名公网访问返回 HTTP 401 登录门槛。Railway `/health` 返回 HTTP 200，模式为 `mock`。PR #1 已于 2026-09-04 以合并提交 `1c38e65` 合并；[PR #2](https://github.com/abo1016/SpeechOptimizer/pull/2) 是将部署修复提交 `3a912b7` 与交接文档提交 `deeeca3` 同步到 `main` 的既定路径，合并后 `main` 将包含这些部署与文档提交。完整生产模式仍需真实模型、支付、邮件、OAuth、数据库/对象存储和可观测性等外部依赖。远程初始化记录详见第 11 节，当前线上事实详见第 12 节。
 
 ## 1. 当前与推荐部署拓扑
 
@@ -173,9 +173,11 @@ Railway 会注入 `PORT`；Docker 镜像已经将 `HOST=0.0.0.0`，应用会读�
 NODE_ENV=production
 HOST=0.0.0.0
 MVP_DATA_DIRECTORY=/var/lib/speechoptimizer
-ALLOWED_ORIGINS=https://app.bo-pop.top
+ALLOWED_ORIGINS=https://speechoptimizer.dengbodev.chatgpt.site,https://app.bo-pop.top
 COOKIE_SECRET=<至少 24 字符的高熵随机值>
 ```
+
+`ALLOWED_ORIGINS` 使用逗号分隔的 Origin 列表，服务端会逐项去除首尾空白；两个 Origin 都不带尾部斜杠。
 
 ### OpenAI
 
@@ -270,11 +272,11 @@ production  真实用户数据和正式域名
 - Railway `speechoptimizer-api` 已部署，`/health` 返回 HTTP 200，运行模式为 `mock`；
 - Railway 500 MB 持久卷已挂载到 `/var/lib/speechoptimizer`，当前保持单实例；
 - `app.bo-pop.top` 的 Sites 域名对象、DNS 验证和 SSL 已激活，匿名公网访问返回 HTTP 401 登录门槛；
-- PR #1 已于 2026-09-04 合并，合并提交为 `1c38e65`；部署源码修复提交 `3a912b7` 已推送到 `codex/cicd-bootstrap`。
+- PR #1 已于 2026-09-04 合并，合并提交为 `1c38e65`；部署源码修复提交 `3a912b7` 与交接文档提交 `deeeca3` 已位于 `codex/cicd-bootstrap`，PR #2 是将二者同步到 `main` 的路径，合并后 `main` 将包含部署与文档提交。
 
 以下事项仍未完成，或不属于本次 Demo/Mock 部署范围：
 
-- `3a912b7` 尚未合入 `main`，需 owner 单独决定源码同步策略；
+- PR #2 是既定源码同步路径；合并时 `main` 会包含 `3a912b7` 的 4 个部署文件变更及 `deeeca3` 的文档回写，不需要另行决定另一条同步路径；
 - OpenAI 真实 STT/反馈、邮件、Google OAuth、Waffo 支付及其生产凭证/业务决策；
 - Supabase schema、Postgres adapter、私有 Storage bucket、对象存储 adapter 和数据迁移；
 - 生产备份/恢复演练、错误监控、日志聚合、uptime 告警和容量/成本策略；
@@ -292,7 +294,7 @@ production  真实用户数据和正式域名
 | Cloudflare | 连接存在；`bo-pop.top` 记录已按部署需要配置 | `app.bo-pop.top` CNAME 指向 `custom-domains.chatgpt.site`，Sites/OpenAI 与 Cloudflare 验证 TXT 已配置；Sites 域名 `status/provider_status/ssl_status` 均为 `active` | 当前无需继续修改 DNS；`api.bo-pop.top` 不是本次验收必需入口，如后续启用必须重新核对 Railway target、CORS 和 Webhook |
 | Supabase | 已连接，可管理项目 | 已在 organization `rwzohujdebahkmqfxloy` 创建独立 `SpeechOptimizer`，project ref `qnmxxvnypmfzwclyyfhr`，region `us-west-1`，状态 `ACTIVE_HEALTHY`；插件返回创建成本 `$0/month` | 当前只完成项目资源创建；业务 Postgres schema/adapter 与对象存储 adapter 尚未实现，因此不把“项目已创建”表述为生产持久化已切换 |
 | Vercel | 连接存在，但当前无可列出的 Team/Project 上下文 | Vercel 仅保留为遗留/备用发布路径；当前主站由 OpenAI Sites 托管 | 未经 owner 决策不创建/链接或启用 Vercel production 路径，不修改现有 Release workflow |
-| GitHub | `gh` 已认证，具备 `repo` / `workflow` scope | PR #1 已于 2026-09-04 合并，merge commit `1c38e65`；部署源码提交 `3a912b7` 已推送到 `codex/cicd-bootstrap`，尚未合入 `main`。生产 Release 仍关闭 | 由 owner 决定是否将部署提交同步到 `main`；不要把 `AGENTS.md` 删除带入任何提交 |
+| GitHub | `gh` 已认证，具备 `repo` / `workflow` scope | PR #1 已于 2026-09-04 合并，merge commit `1c38e65`；PR #2 是将 `3a912b7` 部署变更和 `deeeca3` 文档回写同步到 `main` 的既定路径，合并后 `main` 将包含二者。生产 Release 仍关闭 | 按 PR #2 的文件边界与检查完成同步；不要把 `AGENTS.md` 删除带入任何提交 |
 | Railway | connector 已暴露，且本机 `railway 5.49.1` 已完成 OAuth 登录并链接现有资源 | 已存在独立 `SpeechOptimizer` project、`production`、`speechoptimizer-api`、generated domain；500 MB volume 已 Ready 并挂载 `/var/lib/speechoptimizer`，当前部署为 `mock`，`/health` HTTP 200 | 保持现有 service 与单实例 volume；真实 variables/secrets、Provider、备份和监控按后续生产计划单独配置，不创建第二个同用途 Service |
 
 ### 11.1 当前后续工作所需的最少人工确认
@@ -301,7 +303,7 @@ owner 已完成本阶段两个关键选择：Supabase 使用当前 organization 
 
 下一步执行顺序：
 
-1. 由 owner 决定是否将线上部署提交 `3a912b7` 合入 `main`；保持 `AGENTS.md` 删除在提交范围之外；
+1. 通过 PR #2 将线上部署提交 `3a912b7` 与文档提交 `deeeca3` 同步到 `main`；合并后核验 `main` 的 CI，保持 `AGENTS.md` 删除在提交范围之外；
 2. 保持现有 Railway `speechoptimizer-api` 单实例和 `/var/lib/speechoptimizer` volume，继续用平台健康检查和浏览器报告做运行态验收；
 3. 按生产优先级配置真实 OpenAI、邮件、Google OAuth、Waffo、备份、监控与告警，并在 staging 完成真实 Provider E2E；
 4. 实现并验证 Supabase Postgres/S3 adapter 后，再决定是否迁移出 Railway persistent volume 或扩大实例数；
@@ -327,7 +329,7 @@ owner 已完成本阶段两个关键选择：Supabase 使用当前 organization 
 ### 12.2 源码与平台配置边界
 
 - PR #1 已于 2026-09-04 合并，合并提交为 `1c38e65a6c88212225fea4c70587b33a3f9ffb78`。
-- 线上部署所需 4 个文件变更由 `3a912b799ae1e01f5cae6fd5c6d0d87a39c9f82a`（短 SHA `3a912b7`）推送到 `origin/codex/cicd-bootstrap`，尚未合入 `main`：`apps/mvp-server/Dockerfile`、`prototype/.openai/hosting.json`、`prototype/worker/index.js`、`prototype/tests/sites-worker.test.mjs`。
+- 线上部署所需 4 个文件变更由 `3a912b799ae1e01f5cae6fd5c6d0d87a39c9f82a`（短 SHA `3a912b7`）承载，交接文档回写由 `deeeca308d9fb4fe6bfa52048dc7c78e1ef5b105`（短 SHA `deeeca3`）承载；二者均在 `origin/codex/cicd-bootstrap`，PR #2 是同步到 `main` 的既定路径，合并后 `main` 将包含部署与文档提交。部署文件为：`apps/mvp-server/Dockerfile`、`prototype/.openai/hosting.json`、`prototype/worker/index.js`、`prototype/tests/sites-worker.test.mjs`。
 - `API_ORIGIN`、Sites 同源代理目标、Railway `ALLOWED_ORIGINS`/CORS、volume 挂载和域名路由属于平台侧配置。源码只能提供配置入口和契约，不能单独证明平台侧配置已生效；当前事实以平台状态、HTTP 检查和浏览器报告为准。
 - 当前部署是 Demo/Mock，不等于完整生产模式。模型 API、支付、邮件、Google OAuth、生产数据库/对象存储、备份与可观测性仍待接入。
 - `.github/workflows/release.yml` 中的 Vercel production release 是遗留/备用路径；当前主站使用 Sites，未经 owner 决策不得修改、启用或替换该 Vercel 流程。
