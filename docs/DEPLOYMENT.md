@@ -266,7 +266,7 @@ production  真实用户数据和正式域名
 | Cloudflare | 连接存在；历史读取可见 Zone，但本次更窄的 DNS 读取请求被插件安全策略拦截 | owner 已选择临时使用 `bo-pop.top`；预留 `app.bo-pop.top` / `api.bo-pop.top` | 先取得可执行的 DNS read/write 工具或补齐授权，再在 Vercel/Railway 目标地址确定后创建记录，避免写入无目标占位记录 |
 | Supabase | 已连接，可管理项目 | 已在 organization `rwzohujdebahkmqfxloy` 创建独立 `SpeechOptimizer`，project ref `qnmxxvnypmfzwclyyfhr`，region `us-west-1`，状态 `ACTIVE_HEALTHY`；插件返回创建成本 `$0/month` | 当前只完成项目资源创建；业务 Postgres schema/adapter 与对象存储 adapter 尚未实现，因此不把“项目已创建”表述为生产持久化已切换 |
 | Vercel | 已连接，但当前无可列出的 Team/Project 上下文 | 2026-09-04 19:12 再次确认 `list_teams` 返回空；直接调用当前项目部署的历史结果为 `INVALID_ARGUMENT` | 插件没有暴露“创建/链接 Project”动作；需要先在 Vercel 创建/链接 `prototype` 项目，之后才能继续用插件管理 deployment |
-| GitHub | `gh` 已认证，具备 `repo` / `workflow` scope | 2026-09-04 19:12 远端仍为 0 workflow、0 Repository Secret、0 Repository Variable、0 ruleset，`main` 未保护；CI/Release 只存在于本地工作树 | 先提交并 push 当前已验证 source，让 CI 至少成功运行一次；随后再配置 required check。Vercel secrets 和 `PRODUCTION_DEPLOY_ENABLED` 必须在部署目标就绪后配置，不能写占位值 |
+| GitHub | `gh` 已认证，具备 `repo` / `workflow` scope | 已推送 `codex/cicd-bootstrap` 并创建 PR #1；Actions run `33867873645` 的 `MVP quality gate` 于 2026-09-04 19:26 真实通过。Repository Secret/Variable/ruleset 仍为空，`main` 未保护 | 在合并前确认是否启用 required check；Vercel secrets 和 `PRODUCTION_DEPLOY_ENABLED` 必须在部署目标就绪后配置，不能写占位值。当前不得启用生产 Release |
 | Railway | connector 已暴露，且本机 `railway 5.49.1` 已完成 OAuth 登录并链接现有资源 | 已存在独立 `SpeechOptimizer` project、`production`、`speechoptimizer-api`、generated domain；500 MB volume 已 Ready 并挂载 `/var/lib/speechoptimizer`。2026-09-04 19:12 插件再次确认 `latestDeployment: null` | `origin/main` 仍缺当前 Dockerfile/CI/Release 等部署脚手架，禁止连接旧 remote source。先形成并 push 可审计 Git checkpoint，再把**现有** Service 连接到对应 branch，配置真实 secrets 后首次部署；不创建第二个同用途 Service |
 
 ### 11.1 下一次远程初始化所需的最少人工确认

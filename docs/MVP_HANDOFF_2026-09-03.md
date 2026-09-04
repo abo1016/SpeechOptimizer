@@ -1,11 +1,11 @@
 # SpeechOptimizer MVP 当前开发交接
 
 > 交接日期：2026-09-03（Asia/Shanghai）
-> 最近更新：2026-09-04 19:12（Asia/Shanghai），重新核对磁盘后发现历史 handoff 所称 `release.yml` 已落盘与事实不符：当时仅有 `ci.yml`。本轮已补齐并收紧 CI/Release，常规与 `TZ=UTC` 双轮完整质量门禁均重新通过；GitHub 远端仍为 0 workflow/0 secrets/0 variables/无 ruleset，Railway 仍无 deployment，Vercel 仍无 Team/Project，因此尚未进入远端发布。
+> 最近更新：2026-09-04 19:26（Asia/Shanghai），已将当前验证 source 提交为 `a836b72`，推送到 `codex/cicd-bootstrap` 并创建 PR #1。GitHub-hosted Actions run `33867873645` 的 `MVP quality gate` 已真实通过（53 秒）。生产 Release 开关与 Vercel secrets 仍为空，未合并、未发布、未改 branch protection。
 > 工作区：`/Users/bopop/Documents/SpeechOptimizer`
 > Git 分支：`main`
 > 远端同步：已执行 `git pull --ff-only`，结果为 `Already up to date.`
-> 最近核验：2026-09-04 19:12（Asia/Shanghai）；`CI=1 node scripts/quality-gate.mjs all --require-feature-tests` 与独立 `CI=1 TZ=UTC ...` 均 exit 0，MVP HTTP 两轮均 34/34。YAML 解析、Release 关键结构断言与 `git diff --check` 均通过；本机没有 Compose v2，因此两轮基础设施脚本都按设计跳过 `docker compose config`。Railway 插件仍显示 `latestDeployment: null`；GitHub 远端尚无 workflow；Vercel `list_teams` 仍为空。
+> 最近核验：2026-09-04 19:26（Asia/Shanghai）；本地常规/UTC 双轮完整门禁、YAML/安全结构与 diff 检查保持有效；新增远端证据为 PR #1 的 GitHub-hosted `MVP quality gate` SUCCESS。Railway 仍 `latestDeployment: null`，Vercel `list_teams` 仍为空，因此不能把 CI 绿灯表述为生产部署完成。
 > 当前状态：**本地 MVP、质量门禁、部署脚手架、API 容器运行证据，以及 Railway project/service/domain/persistent-volume 初始化已完成**；Supabase 项目已创建。Railway source/首次 deployment、Vercel runtime、Cloudflare DNS 写入、真实 Provider、生产持久化、部署后 E2E 与 Waffo 外部验收仍未完成，因此**不能宣称正式上线验收完成**。当前会话未获授权 commit/push/merge。
 
 ## 0. Canonical Handoff State
@@ -15,18 +15,18 @@
 | Field | Current State |
 | --- | --- |
 | **Goal** | 完成 SpeechOptimizer 整个 MVP，并达到当前代码、测试、HTTP、浏览器和上线边界可审计的交付质量；在不伪造外部证据的前提下完成 Waffo 官方 Node SDK 3.0.1 集成，并按第 15.13 节继续上线链。 |
-| **Current Phase** | 本地 MVP、部署脚手架和当前工作树双轮质量门禁已完成；进入“verified source 尚未推送”的远端 CI/CD gate。Railway project/service/domain/单实例持久卷已创建但无 source/deployment；Vercel Project 与 Cloudflare DNS 仍待打通。支付继续保持 Waffo Sandbox/Go-Live 外部验证边界。 |
+| **Current Phase** | 本地 MVP/部署脚手架、双轮门禁与首轮 GitHub-hosted CI 已完成；PR #1 等待保护规则/合并决策。Railway project/service/domain/单实例卷已创建但无 source/deployment；Vercel Project 与 Cloudflare DNS 仍待打通。 |
 | **Current Objective** | 不扩展 MVP 产品范围；先把“已验证本地 source 可被云平台部署”的门槛打通，再以 `app.bo-pop.top` / `api.bo-pop.top` 完成 Vercel 前端、Railway 单实例 API、Cloudflare DNS/TLS；之后实现 Supabase Postgres/S3 adapter 与真实邮件/OpenAI/OAuth staging/production 链。支付继续 fail closed。 |
-| **Completed** | 既有 MVP/Waffo、Vercel config、API Dockerfile、部署文档、Supabase 与 Railway 基础资源保持。本轮按磁盘事实补齐 `.github/workflows/release.yml`，并收紧 `ci.yml` checkout：生产开关默认关闭；Release 仅接受成功的 main CI 或 main 手动触发；固定已验证 SHA；重新执行双轮门禁；GHCR/Vercel job 最小权限；固定 Vercel CLI 59.11.2；全部 checkout 禁止持久化 Git 凭证。当前工作树常规/UTC 双轮完整门禁重新全绿。 |
-| **In Progress** | 本地 CI/CD 文件已验收，但尚未形成/push Git checkpoint。GitHub 远端仍为 0 workflow、0 secrets、0 variables、0 ruleset，main 未保护；Railway `latestDeployment: null`；Vercel `list_teams` 为空。远端 `origin/main` 仍不包含 Dockerfile/Vercel/CI/Release/部署文档，不能连接旧 source。 |
-| **Next** | 1）获得远程 Git 写入授权后，把当前已验证工作树形成明确 checkpoint commit 并 push 到用于首次部署的分支；2）用已登录 Railway CLI 将**现有** `speechoptimizer-api` 连接到 `abo1016/SpeechOptimizer` 的该已验证 branch，不创建第二个 Service；3）配置真实 Railway production/staging 变量与 secrets，保持 Waffo 未决 decision fail closed；4）触发首次 deployment，跟踪 build/runtime logs 并验证 Railway domain `/health`；5）再处理 `sleepApplication`/region 是否调整与 `api.bo-pop.top` custom domain；6）建立/链接 Vercel `prototype` Project；7）Cloudflare token 增加 DNS edit 后写 `app`/`api`；8）真实 Provider staging E2E、Postgres/S3 adapter、production smoke、Waffo Phase A-D。 |
-| **Blockers** | **本地 CI/CD：无代码 blocker，当前双轮门禁全绿。** **远端 source：** 仍需明确 commit/push 授权；远端无 workflow，不能取得首次 GitHub Actions 运行证据或配置 required check。**生产 runtime：** 真实 OpenAI/SMTP/Google 与 Waffo 决策/密钥不完整，继续 fail closed。**其他外部条件：** GitHub 无 Vercel secrets/production variable；Vercel 无 Team/Project；Cloudflare 仍缺可执行 DNS edit；Supabase runtime adapter 尚未实现。 |
+| **Completed** | 既有本地与云端基础资源保持。本轮补齐安全 CI/Release，并将 46 个已验证文件提交为 `a836b72 feat(mvp): 完成可部署源码检查点`；推送 `codex/cicd-bootstrap`，创建 PR #1；GitHub Actions run `33867873645` 的 `MVP quality gate` SUCCESS（53 秒）。任务外 `AGENTS.md` 删除未进入 commit。 |
+| **In Progress** | PR #1 已打开且首轮 CI 通过；当前准备补交本次远端结果的纯文档 checkpoint。main 仍无 ruleset/branch protection，PR 尚未合并；Repository secrets/variables 为空，生产 Release 不会运行。Railway/Vercel/Cloudflare 尚未部署。 |
+| **Next** | 1）确认并配置 main required check / PR 合并策略；2）合并 PR #1 后验证 main CI，继续保持 Release disabled；3）将现有 Railway `speechoptimizer-api` 连接到已验证 main，不创建第二个 Service；4）配置真实 staging/production variables 后首次部署并验 `/health`；5）建立 Vercel Project 和真实 secrets，再启用 Release；6）Cloudflare DNS、真实 Provider、Supabase adapter 与 Waffo Phase A-D。 |
+| **Blockers** | **本地/PR CI：无代码 blocker，当前本地双轮与 GitHub-hosted CI 全绿。** **main gate：** branch protection/ruleset 和 PR merge 尚未获本轮明确授权。**生产 runtime：** 真实 OpenAI/SMTP/Google 与 Waffo 决策/密钥不完整；GitHub 无 Vercel secrets/production variable；Vercel 无 Team/Project；Cloudflare DNS edit 与 Supabase runtime adapter 仍待完成。 |
 | **Architecture Decisions** | 既有域名/Supabase/单实例持久卷决定保持。Release 新增：workflow_run 必须验证 CI success + push + main，并 checkout 对应 immutable SHA；人工发布仅 main；生产开关默认关闭；GHCR 和 Vercel 独立 job 共享同一 verify gate；Vercel 使用固定 59.11.2 + prebuilt production deploy；checkout 不持久化凭证。 |
 | **Failed Attempts** | 既有历史失败见 15.7–15.12。此次按 owner 要求派发 Luna/max 子代理 `agt_5325c707`，长期只返回 running 且未落盘；随后协调环境中的 `devspace` 命令消失，进程检查也没有遗留代理进程，因此主控接管实现。不得把该子代理记为完成，也不重复启动同范围并行写入。 |
-| **Verification** | **当前工作树：** 19:11 常规完整 quality gate exit 0；19:11 UTC 独立完整 gate exit 0；两轮 MVP HTTP 均 34/34。Ruby YAML parse、Release 关键字符串/安全结构断言和最终 `git diff --check` 均 PASS。本机无 Compose v2，两轮 infra 均明确跳过 `docker compose config`。**远端：** GitHub 0 workflows/secrets/variables/rulesets，main unprotected；Railway latestDeployment null；Vercel teams empty。**未完成：** GitHub Actions 真实 Runner、GHCR push、Railway/Vercel deployment、Cloudflare DNS、真实 Provider/Waffo/Supabase adapter。 |
-| **Git State** | Branch `main`；HEAD `d1432f36fb03899c70bce22fd5284e42632b1412`；相对 `origin/main` behind 0 / ahead 1；工作树 dirty，未执行 commit/push/merge/rebase/reset/clean/stash。`.github/` 仍未跟踪，远端无 workflow。任务外出现 tracked `AGENTS.md` 删除；本轮未删除、未恢复，也不得在 CI/CD 提交中静默处理。 |
+| **Verification** | **本地：** 常规与 UTC 完整 quality gate exit 0，两轮 MVP HTTP 34/34；YAML/Release 结构/secret pattern/diff checks PASS；Compose v2 未覆盖。**GitHub：** PR #1 Actions run `33867873645`, job `101006745249`, `MVP quality gate` SUCCESS，53 秒。**外部仍未完成：** main 合并后 CI、GHCR push、Railway/Vercel deployment、Cloudflare DNS、真实 Provider/Waffo/Supabase adapter。 |
+| **Git State** | Branch `codex/cicd-bootstrap`；HEAD `a836b7287622dafda2238772c45a8312c686e2fa`，与 `origin/codex/cicd-bootstrap` 同步；PR #1 OPEN，base main。未 merge/rebase/reset/clean/stash。工作树仅剩任务外 tracked `AGENTS.md` 删除未暂存；它未进入 commit。 |
 | **Important Files** | `AGENTS.md`（tracked 但当前工作树已删除，需 owner 确认意图）；`docs/MVP_HANDOFF_2026-09-03.md`（恢复入口：第 0 节 + 15.13）；`docs/DEPLOYMENT.md`；`.github/workflows/{ci.yml,release.yml}`；`prototype/vercel.json`；`apps/mvp-server/Dockerfile`；`.dockerignore`；`.waffo/integration-manifest.json`；以及 15.8 中的 MVP/Waffo 关键源码与测试。 |
-| **Session Summary** | 2026-09-04 19:12 继续 CI/CD：纠正历史 `release.yml` 已落盘的错误记录，补齐安全 Release workflow，收紧 CI checkout，完成 YAML/结构检查与常规+UTC 双轮全量门禁。读取 GitHub/Railway/Vercel 远端状态，确认仍未发布。Luna 子代理通道失败后由主控接管；未 commit/push/deploy/DNS/secret write。详见 15.13。 |
+| **Session Summary** | 2026-09-04 19:26：在 15.13 本地收口后，经 owner 授权创建 `codex/cicd-bootstrap`、提交 `a836b72`、推送并创建 PR #1；首轮 GitHub-hosted CI 已通过。生产开关仍关闭，未 merge/deploy/DNS/secret write。详见 15.14。 |
 
 ## 1. 交接结论
 
@@ -1510,3 +1510,31 @@ git diff --check
 下一最短路径仍是先取得明确 commit/push 授权，为当前已验证工作树建立 Git checkpoint 并推到部署 branch。首次 CI 跑绿后再设置 required check；Vercel Project 与真实 secrets 就绪前保持 `PRODUCTION_DEPLOY_ENABLED` 不存在。之后连接现有 Railway Service、配置真实变量并执行首次 deployment。禁止用占位 secret、未确认 Waffo decision 或旧 `origin/main` 绕过 gate。
 
 本轮另观察到 tracked 根 `AGENTS.md` 在任务外被删除；开始状态中没有该删除，本轮未执行删除或恢复。后续 commit 前必须由 owner 确认该删除是否有意，不能把它静默混入 CI/CD checkpoint。
+
+### 15.14 2026-09-04 19:26 Git checkpoint、PR 与首轮 GitHub CI checkpoint（当前最新）
+
+owner 明确授权下一步后，主控执行了以下可审计操作：
+
+```text
+branch: codex/cicd-bootstrap
+commit: a836b7287622dafda2238772c45a8312c686e2fa
+message: feat(mvp): 完成可部署源码检查点
+push: origin/codex/cicd-bootstrap
+PR: https://github.com/abo1016/SpeechOptimizer/pull/1
+```
+
+提交前 staged-only 审查确认：46 个源码/测试/部署/文档文件进入 checkpoint；`.data/`、`.pnpm-store/` 已加入 ignore；常见真实凭证格式扫描未命中；`.env.example` 只含 replace/example 占位值；任务外 `AGENTS.md` 删除是唯一未暂存差异，未进入 commit。
+
+PR 创建后触发了真实 GitHub Actions：
+
+```text
+run: 33867873645
+job: 101006745249
+check: MVP quality gate
+result: SUCCESS
+duration: 53s
+```
+
+这份证据覆盖 GitHub Ubuntu Runner 上的 checkout、Node 24、pnpm 11.25.0、逐包 frozen install、常规/UTC 双轮 quality gate 与 diff check。它不覆盖生产 Release，因为 `PRODUCTION_DEPLOY_ENABLED` 与 Vercel secrets 均未配置；也不覆盖 GHCR push、Railway/Vercel deployment 或 Cloudflare DNS。
+
+当前 PR 尚未合并，main 无 ruleset/branch protection。下一步应先由 owner 授权 main 保护规则与合并策略；配置 required `MVP quality gate` 后再合并，并验证 main CI。生产目标和真实 secrets 就绪前继续保持 Release disabled。
