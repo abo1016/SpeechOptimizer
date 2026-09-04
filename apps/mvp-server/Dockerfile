@@ -37,7 +37,8 @@ ENV NODE_ENV=production \
     MVP_DATA_DIRECTORY=/var/lib/speechoptimizer
 
 EXPOSE 8787
-VOLUME ["/var/lib/speechoptimizer"]
+
+# 数据目录由 Railway 卷挂载；镜像不声明 VOLUME，因为 Railway 构建器不支持该指令。
 
 # 只验证应用自身健康端点，不访问外部 Provider，避免第三方波动导致容器被错误重启。
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
