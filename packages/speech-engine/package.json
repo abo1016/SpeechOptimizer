@@ -1,0 +1,16 @@
+{
+  "name": "@speechoptimizer/speech-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "SpeechOptimizer MVP 可复现语音分析引擎",
+  "exports": "./src/index.js",
+  "scripts": {
+    "check": "node scripts/check.mjs",
+    "test": "node --test test/*.test.js",
+    "build": "node scripts/build.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

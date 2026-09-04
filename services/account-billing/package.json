@@ -1,0 +1,15 @@
+{
+  "name": "@speechoptimizer/account-billing",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "SpeechOptimizer MVP 账户、认证、权益和计费领域服务",
+  "scripts": {
+    "check": "node scripts/check.mjs",
+    "test": "node --test test/*.test.js",
+    "build": "node scripts/build.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
