@@ -73,18 +73,13 @@ jobs:
           ref: ${{ steps.release-source.outputs.sha }}
           persist-credentials: false
 
-      - name: Setup Node.js 24
-        uses: actions/setup-node@v7
+      - name: Setup pnpm and Node.js 24
+        uses: pnpm/setup@v2
         with:
-          node-version: "24"
-          # Release 不依赖隐式 package-manager cache，逐包 frozen install 是唯一依赖入口。
-          package-manager-cache: false
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-        with:
+          # 官方 successor 同时提供受校验的 pnpm 与 Node runtime。
           version: "11.25.0"
-          run_install: false
+          runtime: node@24
+          install: false
 
       - name: Install locked dependencies
         shell: bash
@@ -193,18 +188,13 @@ jobs:
           # Vercel 通过独立 token 认证，不需要保留 Git 凭证。
           persist-credentials: false
 
-      - name: Setup Node.js 24
-        uses: actions/setup-node@v7
+      - name: Setup pnpm and Node.js 24
+        uses: pnpm/setup@v2
         with:
-          node-version: "24"
-          # Vercel 构建由 CLI 管理依赖，不启用 setup-node 的自动缓存探测。
-          package-manager-cache: false
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-        with:
+          # Vercel CLI 需要 npm，Node runtime 与 pnpm 在同一步固定安装。
           version: "11.25.0"
-          run_install: false
+          runtime: node@24
+          install: false
 
       - name: Validate Vercel secrets
         shell: bash
