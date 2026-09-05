@@ -1,0 +1,18 @@
+{
+  "name": "@speechoptimizer/cloudflare-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:prototype": "pnpm --dir ../../prototype run build",
+    "check": "tsc --noEmit",
+    "test": "node --test test/*.test.mjs",
+    "dev": "pnpm run build:prototype && wrangler dev --env local",
+    "preview": "pnpm run build:prototype && wrangler dev --env preview --remote",
+    "dry-run": "pnpm run build:prototype && wrangler deploy --env preview --dry-run"
+  },
+  "devDependencies": {
+    "typescript": "5.9.2",
+    "wrangler": "4.129.0"
+  }
+}

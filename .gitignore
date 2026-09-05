@@ -19,6 +19,10 @@ dist/
 .pnpm-store/
 **/.pnpm-store/
 
+# Wrangler/Miniflare 本地状态包含可重建的缓存、D1/R2/KV 仿真数据与 SQLite 文件，不进入版本库。
+.wrangler/
+**/.wrangler/
+
 # Vercel CLI 本地链接信息包含个人/团队项目标识，只保留仓库级 vercel 配置，不提交本机链接目录。
 .vercel/
 **/.vercel/

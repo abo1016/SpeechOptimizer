@@ -1,0 +1,43 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "speechoptimizer-web",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-05",
+  "assets": {
+    "directory": "../../prototype/dist/client",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/health", "/health/*", "/api/*"]
+  },
+  "vars": {
+    "APP_ENV": "local",
+    "APP_VERSION": "local",
+    "RESOURCE_NAMESPACE": "speechoptimizer-local"
+  },
+  "env": {
+    "local": {
+      "name": "speechoptimizer-web-local",
+      "vars": {
+        "APP_ENV": "local",
+        "APP_VERSION": "local",
+        "RESOURCE_NAMESPACE": "speechoptimizer-local"
+      }
+    },
+    "preview": {
+      "name": "speechoptimizer-web-preview",
+      "vars": {
+        "APP_ENV": "preview",
+        "APP_VERSION": "preview",
+        "RESOURCE_NAMESPACE": "speechoptimizer-preview"
+      }
+    },
+    "production": {
+      "name": "speechoptimizer-web",
+      "vars": {
+        "APP_ENV": "production",
+        "APP_VERSION": "production",
+        "RESOURCE_NAMESPACE": "speechoptimizer-production"
+      }
+    }
+  }
+}

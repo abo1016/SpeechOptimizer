@@ -8,10 +8,11 @@ import path from "node:path";
 // 统一门禁只编排仓库已有命令，不在验证阶段安装依赖或修改锁文件。
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const PROTOTYPE_DIR = path.join(REPO_ROOT, "prototype");
+const CLOUDFLARE_DIR = path.join(REPO_ROOT, "apps", "cloudflare-worker");
 const INTEGRATIONS_DIR = path.join(REPO_ROOT, "spikes", "sdk-integrations");
 const INFRA_DIR = path.join(REPO_ROOT, "infra", "local");
 const PNPM_BIN = process.env.PNPM_BIN || "pnpm";
-const VALID_SCOPES = new Set(["all", "prototype", "integrations", "services"]);
+const VALID_SCOPES = new Set(["all", "prototype", "cloudflare", "integrations", "services"]);
 
 // 运行时包统一执行三道门禁，确保实现、测试和产物均可验证。
 const RUNTIME_PACKAGES = [
@@ -86,6 +87,24 @@ function runPrototype(requireFeatureTests) {
   return results.every(Boolean);
 }
 
+function runCloudflare() {
+  const scripts = readScripts(CLOUDFLARE_DIR);
+  if (!scripts) {
+    return fail("Cloudflare Worker 包尚不存在，不能跳过该门禁");
+  }
+
+  // Phase 1 同时验证 Worker 源码、路由契约和 Wrangler Preview 配置，不进行远程部署。
+  const requiredScripts = ["check", "test", "dry-run"];
+  const missing = requiredScripts.filter((name) => !scripts[name]);
+  if (missing.length > 0) {
+    return fail(`Cloudflare Worker 缺少脚本：${missing.join(", ")}`);
+  }
+
+  return requiredScripts
+    .map((name) => run(`Cloudflare Worker ${name}`, PNPM_BIN, ["run", name], CLOUDFLARE_DIR))
+    .every(Boolean);
+}
+
 function runIntegrations() {
   const scripts = readScripts(INTEGRATIONS_DIR);
   if (!scripts) {
@@ -133,7 +152,7 @@ function main() {
   const scope = process.argv[2] ?? "all";
   const requireFeatureTests = process.argv.includes("--require-feature-tests");
   if (!VALID_SCOPES.has(scope)) {
-    console.error("用法：node scripts/quality-gate.mjs [all|prototype|integrations|services] [--require-feature-tests]");
+    console.error("用法：node scripts/quality-gate.mjs [all|prototype|cloudflare|integrations|services] [--require-feature-tests]");
     process.exitCode = 2;
     return;
   }
@@ -141,6 +160,9 @@ function main() {
   const results = [];
   if (scope === "all" || scope === "prototype") {
     results.push(runPrototype(requireFeatureTests));
+  }
+  if (scope === "all" || scope === "cloudflare") {
+    results.push(runCloudflare());
   }
   if (scope === "all" || scope === "integrations") {
     results.push(runIntegrations());
