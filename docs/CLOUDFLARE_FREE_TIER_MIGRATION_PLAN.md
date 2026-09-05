@@ -1,6 +1,6 @@
 # SpeechOptimizer Cloudflare 全栈免费层改造方案
 
-> 状态：Phase 1 本地实现与双轮质量门禁已完成；正式账户 Preview 发布仍受 Cloudflare 认证与固定提交版本约束
+> 状态：Phase 1 本地实现、双轮质量门禁、固定 commit 版本化与正式账户 Preview 发布均已完成；仅剩受当前网络限制影响的远程 HTTP smoke 未闭环
 > 编制日期：2026-09-05
 > 目标：在不使用 Railway、Vercel 和 Cloudflare Container 的前提下，将公开站点、真实认证、音频分析与数据持久化迁移到 Cloudflare 免费额度内。第三方 OpenAI、Resend、域名和支付渠道费用不属于 Cloudflare 免费额度。
 
@@ -284,7 +284,7 @@ Gate：首页公网 200、真实登录成功、完整分析成功、账户删除
 ## 17. Phase 1 最终整改进度
 
 > 更新时间：2026-09-05（Asia/Shanghai）
-> 当前结论：Phase 1 本地实现与本地 Gate 已完成，常规与 `TZ=UTC` 双轮全量质量门禁均已通过。2026-09-05 已完成本机 Wrangler OAuth 登录，`wrangler whoami` 明确显示 `workers_scripts (write)` 权限；随后已将 `speechoptimizer-web-preview` 正式部署到目标 Cloudflare 账号，Static Assets 上传成功，Worker Version ID 为 `e195ac3e-fe03-414a-b1de-24e981596d2d`。Cloudflare API 进一步确认该版本以 100% 流量部署且 Worker `has_assets=true`。当前仅剩两项未闭环：工作树尚未形成固定 commit，以及当前执行环境访问 `workers.dev` 仍受网络限制（经代理返回 Cloudflare 1010，禁用代理后直连超时），因此远程 HTTP smoke 尚不能声明通过。
+> 当前结论：Phase 1 本地实现与本地 Gate 已完成，常规与 `TZ=UTC` 双轮全量质量门禁均已通过。2026-09-05 已完成本机 Wrangler OAuth 登录，`wrangler whoami` 明确显示 `workers_scripts (write)` 权限；Cloudflare Phase 1 源码已形成固定 commit `ec7eef7fce7e3bf16a34ece080c22be16e3019f5`，并以该完整 SHA 作为 `APP_VERSION` 重新部署 `speechoptimizer-web-preview`。最新 Worker Version ID 为 `d58d696d-9175-4e56-a3d1-52a7d36039af`，Cloudflare API 已确认最新 deployment 以 100% 流量指向该版本。当前仅剩远程 HTTP smoke 未闭环：当前执行环境访问 `workers.dev` 经代理返回 Cloudflare 1010，禁用代理后直连超时，因此不能把网络受限环境下的失败冒充应用验收结果。
 
 ### 17.1 已整改完成
 
@@ -310,18 +310,21 @@ Gate：首页公网 200、真实登录成功、完整分析成功、账户删除
 - `wrangler whoami`：已登录目标账号，OAuth token 明确包含 `workers_scripts (write)` 等 Workers 写权限。
 - `pnpm exec wrangler deploy --env preview --var APP_VERSION:ff551f1+dirty.e4dd4f18e2dd`：正式目标账号部署成功，4 个 Static Assets 上传成功，Worker Version ID `e195ac3e-fe03-414a-b1de-24e981596d2d`，发布地址为 `speechoptimizer-web-preview.<account-subdomain>.workers.dev`。
 - Cloudflare API 正式账号复核：`speechoptimizer-web-preview` 已存在，`has_assets=true`、`has_modules=true`、`last_deployed_from=wrangler`；deployment `6ddf58b1-b60c-4277-a78d-a13666275814` 将 Version ID `e195ac3e-fe03-414a-b1de-24e981596d2d` 以 100% 流量部署。
+- Git checkpoint：Cloudflare Phase 1 源码、质量门禁和迁移文档已提交为 `ec7eef7fce7e3bf16a34ece080c22be16e3019f5`（`feat(cloudflare): bootstrap free-tier preview worker`）；任务外 `AGENTS.md` 删除未被暂存或提交。
+- 固定版本正式重发：以 `APP_VERSION=ec7eef7fce7e3bf16a34ece080c22be16e3019f5` 执行 `wrangler deploy --env preview` 成功；Static Assets 无变化无需重复上传，最新 Worker Version ID 为 `d58d696d-9175-4e56-a3d1-52a7d36039af`。
+- Cloudflare API 最新 deployment 复核：deployment `529f142d-bc1d-40bf-85be-6791fffb2361` 将 Version ID `d58d696d-9175-4e56-a3d1-52a7d36039af` 以 100% 流量部署。
+- 固定 commit 后再次执行 `CI=1 node scripts/quality-gate.mjs cloudflare`：`check`、4/4 路由测试和 Preview dry-run 全部通过；dry-run 仍只显示 `ASSETS`、`APP_ENV=preview`、`APP_VERSION=preview`、`RESOURCE_NAMESPACE=speechoptimizer-preview`，未出现 D1/R2/Secrets 绑定。
 - 正式 Preview HTTP smoke：当前终端经代理请求 `/`、`/history`、`/health`、POST `/health`、未知 `/api/v1/*` 均被 Cloudflare 1010 返回 403；禁用所有代理变量后相同请求均连接超时。因此现有证据证明正式账号上传/部署完成，但当前执行环境无法完成外部 HTTP 可达性验收。
 - `git diff --check`：通过。
 
 ### 17.3 最后待整改/验收项
 
-1. 将本轮 Phase 1 改动形成固定 commit，再以该 commit SHA 作为 `APP_VERSION` 重新发布一次 `speechoptimizer-web-preview`。当前正式 Preview 已使用可审计的 dirty 指纹 `ff551f1+dirty.e4dd4f18e2dd` 部署用于运行验证，但它不能替代最终固定 commit SHA。
-2. 在远程 Preview 复核首页、至少一个 SPA 深链、`/health`、JSON 404 和 JSON 405。
-3. 确认 Preview 环境未绑定或引用 Production D1、R2、Secrets；Phase 2 创建资源时继续保持物理隔离。
-4. 远程 Preview Gate 通过后，将本文状态改为“Phase 1 完成”，并把 `Current Phase` 切换到 Phase 2。
-5. Phase 2 开始前继续保留现有 Sites + Railway Demo/Mock 作为迁移回退路径，不提前下线或删除。
+1. 从可正常访问该 `workers.dev` 地址的网络，在远程 Preview 复核首页、至少一个 SPA 深链、`/health`、JSON 404 和 JSON 405。
+2. 远程 HTTP smoke 通过后，将本文状态改为“Phase 1 完成”，并把 `Current Phase` 切换到 Phase 2。
+3. Phase 2 创建资源时继续保持 Preview 与 Production 的 D1、R2、Secrets 物理隔离；当前 Phase 1 Preview dry-run 已确认尚未绑定这些资源。
+4. Phase 2 开始前继续保留现有 Sites + Railway Demo/Mock 作为迁移回退路径，不提前下线或删除。
 
-当前明确阻塞：Cloudflare 账号写权限与正式 Preview 部署问题已经解除。剩余阻塞为：本轮 Worker/质量门禁改动尚未形成固定 commit；当前执行环境访问正式 `workers.dev` 时，经代理会被 Cloudflare 1010 拒绝，禁用代理后则连接超时。完成固定 commit + 重新发布，并从可正常访问该 `workers.dev` 地址的网络完成 HTTP smoke 后，才能满足“固定 commit SHA + 正式账户 Preview + 远程 smoke”的完整 Gate。
+当前明确阻塞：Cloudflare 账号写权限、固定 commit 和正式 Preview 部署均已解除。唯一剩余阻塞是当前执行环境无法正常访问正式 `workers.dev`：经代理会被 Cloudflare 1010 拒绝，禁用代理后连接超时。需要从可正常访问该地址的网络完成 HTTP smoke，才能满足“固定 commit SHA + 正式账户 Preview + 远程 smoke”的完整 Gate。
 
 ### 17.4 Phase 2 启动条件
 
