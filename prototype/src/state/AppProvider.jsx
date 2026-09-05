@@ -9,6 +9,7 @@ export function AppProvider({ children }) {
   const [session, setSession] = useState(null);
   const [providerMode, setProviderMode] = useState("unknown");
   const [authMode, setAuthMode] = useState("unknown");
+  const [turnstileSiteKey, setTurnstileSiteKey] = useState("");
   const [retainAudio, setRetainAudio] = useState(false);
   const [currentAnalysis, setCurrentAnalysis] = useState(null);
   const [report, setReport] = useState(null);
@@ -27,6 +28,7 @@ export function AppProvider({ children }) {
   const applyBootstrap = useCallback((value) => {
     setProviderMode(value.health.mode);
     setAuthMode(value.health.authMode ?? value.health.mode);
+    setTurnstileSiteKey(value.health.turnstileSiteKey ?? "");
     setSession(value.session);
     setRetainAudio(value.privacy.retainAudio === true);
     logEvent("app.bootstrap_ready", {
@@ -84,9 +86,9 @@ export function AppProvider({ children }) {
   }, [refreshSession]);
 
   const value = useMemo(() => ({
-    session, providerMode, authMode, retainAudio, currentAnalysis, report, bootError, booting,
+    session, providerMode, authMode, turnstileSiteKey, retainAudio, currentAnalysis, report, bootError, booting,
     setCurrentAnalysis, setReport, refreshSession, retryBootstrap, updatePrivacy, logout,
-  }), [session, providerMode, authMode, retainAudio, currentAnalysis, report, bootError, booting, refreshSession, retryBootstrap, updatePrivacy, logout]);
+  }), [session, providerMode, authMode, turnstileSiteKey, retainAudio, currentAnalysis, report, bootError, booting, refreshSession, retryBootstrap, updatePrivacy, logout]);
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
 

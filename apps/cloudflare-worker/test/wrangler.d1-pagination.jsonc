@@ -1,0 +1,14 @@
+{
+  // 测试使用独立数据库名，并由 Node 测试传入临时 persist 目录，避免触碰 local 默认状态或任何远端 D1。
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "speechoptimizer-d1-pagination-test",
+  "main": "d1-pagination-harness.js",
+  "compatibility_date": "2026-09-05",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "speechoptimizer-d1-pagination-test",
+      "migrations_dir": "../migrations"
+    }
+  ]
+}

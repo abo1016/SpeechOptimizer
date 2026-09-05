@@ -1,15 +1,22 @@
 /**
  * 原型上传约束集中在纯函数中，便于未来替换为服务端校验并保持前后端一致。
  */
-export const MAX_FILE_BYTES = 25 * 1024 * 1024;
-export const ACCEPTED_AUDIO_TYPES = ["audio/mpeg", "audio/wav", "audio/x-wav", "audio/mp4", "audio/webm"];
+export const MAX_FILE_BYTES = 10 * 1024 * 1024;
+export const ACCEPTED_AUDIO_TYPES = ["audio/webm", "audio/webm;codecs=opus"];
+export const ANONYMOUS_MAX_RECORDING_SECONDS = 60;
+export const ACCOUNT_MAX_RECORDING_SECONDS = 5 * 60;
 
 export function validateAudioFile(file) {
   if (!file) return { valid: false, reason: "missing_file", message: "Choose an audio file to continue." };
-  const validType = ACCEPTED_AUDIO_TYPES.includes(file.type) || /\.(mp3|wav|m4a|webm)$/i.test(file.name || "");
-  if (!validType) return { valid: false, reason: "unsupported_type", message: "This file type is not supported. Choose MP3, WAV, M4A, or WebM." };
-  if (file.size > MAX_FILE_BYTES) return { valid: false, reason: "file_too_large", message: "This file is larger than 25 MB. Choose a smaller audio file." };
+  const validType = ACCEPTED_AUDIO_TYPES.includes(file.type) || (/\.webm$/i.test(file.name || "") && !file.type);
+  if (!validType) return { valid: false, reason: "unsupported_type", message: "Only WebM/Opus audio is supported for this beta." };
+  if (file.size > MAX_FILE_BYTES) return { valid: false, reason: "file_too_large", message: "This file is larger than 10 MiB. Choose a smaller WebM/Opus file." };
   return { valid: true };
+}
+
+/** 匿名体验按免费试用时长预检；登录账户才展示完整的五分钟录音能力。 */
+export function recordingLimitSeconds(user) {
+  return user ? ACCOUNT_MAX_RECORDING_SECONDS : ANONYMOUS_MAX_RECORDING_SECONDS;
 }
 
 // 录音按钮只负责开始、暂停和继续；已有 take 必须通过显式重录操作替换。

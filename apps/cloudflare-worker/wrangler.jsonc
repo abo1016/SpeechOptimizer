@@ -9,34 +9,143 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/health", "/health/*", "/api/*"]
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "speechoptimizer-local",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "queues": {
+    "producers": [
+      { "binding": "ANALYSIS_QUEUE", "queue": "speechoptimizer-local-analysis" }
+    ],
+    "consumers": [
+      {
+        "queue": "speechoptimizer-local-analysis",
+        "max_batch_size": 1,
+        "max_retries": 2,
+        "dead_letter_queue": "speechoptimizer-local-analysis-dlq"
+      }
+    ]
+  },
+  "workflows": [
+    {
+      "binding": "ANALYSIS_WORKFLOW",
+      "name": "speechoptimizer-local-analysis",
+      "class_name": "SpeechAnalysisWorkflow"
+    }
+  ],
+  "triggers": {
+    "crons": ["17 3 * * *"]
+  },
   "vars": {
     "APP_ENV": "local",
     "APP_VERSION": "local",
-    "RESOURCE_NAMESPACE": "speechoptimizer-local"
+    "RESOURCE_NAMESPACE": "speechoptimizer-local",
+    "ALLOWED_ORIGINS": "http://localhost:5173,http://127.0.0.1:5173",
+    "STORAGE_LIMIT_BYTES": "838860800",
+    "PAYMENTS_ENABLED": "false",
+    "MAX_AUDIO_BYTES": "10485760",
+    "MAX_AUDIO_DURATION_MS": "300000",
+    "ANONYMOUS_MAX_AUDIO_DURATION_MS": "60000",
+    "FREE_TIER_GUARD_LEVEL": "0"
   },
   "env": {
     "local": {
       "name": "speechoptimizer-web-local",
+      "d1_databases": [
+        { "binding": "DB", "database_name": "speechoptimizer-local", "migrations_dir": "migrations" }
+      ],
+      "r2_buckets": [
+        { "binding": "AUDIO_BUCKET", "bucket_name": "speechoptimizer-local-private" }
+      ],
+      "queues": {
+        "producers": [{ "binding": "ANALYSIS_QUEUE", "queue": "speechoptimizer-local-analysis" }],
+        "consumers": [{ "queue": "speechoptimizer-local-analysis", "max_batch_size": 1, "max_retries": 2,
+          "dead_letter_queue": "speechoptimizer-local-analysis-dlq" }]
+      },
+      "workflows": [{ "binding": "ANALYSIS_WORKFLOW", "name": "speechoptimizer-local-analysis",
+        "class_name": "SpeechAnalysisWorkflow" }],
+      "triggers": { "crons": ["17 3 * * *"] },
       "vars": {
         "APP_ENV": "local",
         "APP_VERSION": "local",
-        "RESOURCE_NAMESPACE": "speechoptimizer-local"
+        "RESOURCE_NAMESPACE": "speechoptimizer-local",
+        "STORAGE_PROVIDER": "r2",
+        "ALLOWED_ORIGINS": "http://localhost:5173,http://127.0.0.1:5173",
+        "R2_BUCKET_NAME": "speechoptimizer-local-private",
+        "STORAGE_LIMIT_BYTES": "838860800",
+        "PAYMENTS_ENABLED": "false",
+        "MAX_AUDIO_BYTES": "10485760",
+        "MAX_AUDIO_DURATION_MS": "300000",
+        "ANONYMOUS_MAX_AUDIO_DURATION_MS": "60000",
+        "FREE_TIER_GUARD_LEVEL": "0",
+        "COOKIE_SECRET": "local-development-cookie-secret-only"
       }
     },
     "preview": {
       "name": "speechoptimizer-web-preview",
+      "d1_databases": [
+        { "binding": "DB", "database_name": "speechoptimizer-preview",
+          "database_id": "d899b126-65ca-4689-99d4-ed462fa15959", "migrations_dir": "migrations" }
+      ],
+      "queues": {
+        "producers": [{ "binding": "ANALYSIS_QUEUE", "queue": "speechoptimizer-preview-analysis" }],
+        "consumers": [{ "queue": "speechoptimizer-preview-analysis", "max_batch_size": 1, "max_retries": 2,
+          "dead_letter_queue": "speechoptimizer-preview-analysis-dlq" }]
+      },
+      "workflows": [{ "binding": "ANALYSIS_WORKFLOW", "name": "speechoptimizer-preview-analysis",
+        "class_name": "SpeechAnalysisWorkflow" }],
+      "triggers": { "crons": ["17 3 * * *"] },
       "vars": {
         "APP_ENV": "preview",
         "APP_VERSION": "preview",
-        "RESOURCE_NAMESPACE": "speechoptimizer-preview"
+        "RESOURCE_NAMESPACE": "speechoptimizer-preview",
+        "STORAGE_PROVIDER": "supabase",
+        "ALLOWED_ORIGINS": "https://speechoptimizer-web-preview.bb382978203.workers.dev,https://speak-confidently.top",
+        "SUPABASE_URL": "https://qnmxxvnypmfzwclyyfhr.supabase.co",
+        "SUPABASE_STORAGE_BUCKET": "speechoptimizer-preview-audio",
+        "STORAGE_LIMIT_BYTES": "838860800",
+        "PAYMENTS_ENABLED": "false",
+        "MAX_AUDIO_BYTES": "10485760",
+        "MAX_AUDIO_DURATION_MS": "300000",
+        "ANONYMOUS_MAX_AUDIO_DURATION_MS": "60000",
+        "FREE_TIER_GUARD_LEVEL": "0",
+        // 此公开 key 由 /health 返回给前端渲染；验证密钥必须保存在 Worker Secret。
+        "TURNSTILE_SITE_KEY": "0x4AAAAAAEovEhmSiSUpQ9BN"
       }
     },
     "production": {
       "name": "speechoptimizer-web",
+      "d1_databases": [
+        { "binding": "DB", "database_name": "speechoptimizer-production",
+          "database_id": "d92dd680-b8e2-4681-b904-12a888780198", "migrations_dir": "migrations" }
+      ],
+      "queues": {
+        "producers": [{ "binding": "ANALYSIS_QUEUE", "queue": "speechoptimizer-analysis" }],
+        "consumers": [{ "queue": "speechoptimizer-analysis", "max_batch_size": 1, "max_retries": 2,
+          "dead_letter_queue": "speechoptimizer-analysis-dlq" }]
+      },
+      "workflows": [{ "binding": "ANALYSIS_WORKFLOW", "name": "speechoptimizer-analysis",
+        "class_name": "SpeechAnalysisWorkflow" }],
+      "triggers": { "crons": ["17 3 * * *"] },
       "vars": {
         "APP_ENV": "production",
         "APP_VERSION": "production",
-        "RESOURCE_NAMESPACE": "speechoptimizer-production"
+        "RESOURCE_NAMESPACE": "speechoptimizer-production",
+        "STORAGE_PROVIDER": "supabase",
+        "ALLOWED_ORIGINS": "https://speak-confidently.top",
+        "SUPABASE_URL": "https://qnmxxvnypmfzwclyyfhr.supabase.co",
+        "SUPABASE_STORAGE_BUCKET": "speechoptimizer-production-audio",
+        "STORAGE_LIMIT_BYTES": "838860800",
+        "PAYMENTS_ENABLED": "false",
+        "MAX_AUDIO_BYTES": "10485760",
+        "MAX_AUDIO_DURATION_MS": "300000",
+        "ANONYMOUS_MAX_AUDIO_DURATION_MS": "60000",
+        "FREE_TIER_GUARD_LEVEL": "0",
+        // 此 key 与 Preview 共用同一 widget；正式验证密钥必须在发布前独立存入 Worker Secret。
+        "TURNSTILE_SITE_KEY": "0x4AAAAAAEovEhmSiSUpQ9BN"
       }
     }
   }

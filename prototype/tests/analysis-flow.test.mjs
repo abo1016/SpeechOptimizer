@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { analysisStep, pollAnalysis } from "../src/lib/analysisFlow.js";
+import { analysisStep, needsAudioUpload, pollAnalysis } from "../src/lib/analysisFlow.js";
 
 test("polls until a terminal status and reports every server state", async () => {
   const states = ["uploaded", "transcribing", "analyzing", "completed"];
@@ -30,4 +30,12 @@ test("maps server states to stable progress steps", () => {
   assert.equal(analysisStep("transcribing"), 1);
   assert.equal(analysisStep("analyzing"), 2);
   assert.equal(analysisStep("completed"), 2);
+});
+
+test("幂等创建重放仅在任务仍为 created 时重新上传音频", () => {
+  assert.equal(needsAudioUpload({ status: "created" }), true);
+  assert.equal(needsAudioUpload({ status: "uploaded" }), false);
+  assert.equal(needsAudioUpload({ status: "transcribing" }), false);
+  assert.equal(needsAudioUpload({ status: "completed" }), false);
+  assert.equal(needsAudioUpload({}), true);
 });

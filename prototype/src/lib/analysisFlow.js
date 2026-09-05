@@ -1,5 +1,10 @@
 export const TERMINAL_ANALYSIS_STATUSES = new Set(["completed", "failed", "cancelled"]);
 
+/** 幂等创建重放返回既有任务时，只有 created 状态可以安全地重新申请对象存储上传授权。 */
+export function needsAudioUpload(analysis) {
+  return !analysis?.status || analysis.status === "created";
+}
+
 /** 轮询只在任务未结束时等待；AbortSignal 让离页和取消立即停止网络活动。 */
 export async function pollAnalysis(id, options) {
   const read = options.read;

@@ -1,345 +1,232 @@
-# SpeechOptimizer MVP 上线与部署准备
+# SpeechOptimizer 部署运行手册
 
-> 当前状态（2026-09-05）：正式域名改为已购买并完成 Cloudflare 委派的 `speak-confidently.top`。OpenAI Sites 已绑定该域名，SSL 已激活且路由正在重新部署；Resend 已创建同名发件域名并正在验证 DKIM/SPF。Google OAuth 与 Railway 的 Origin、回调和发件地址均已切换到 `.top`，Railway 仍使用 `skipDeploys=true` 保持现有 Mock 运行态，待平台验证和本地质量门禁完成后统一部署。
+> 最后更新：2026-09-05（Asia/Shanghai）
+>
+> 当前状态：**Cloudflare 免费层迁移进行中。Preview 的 Phase 1 HTTP smoke 已通过；本轮高优先级代码纠偏与本地 Gate 已通过，Preview D1 `0003`～`0006` 已完成受控应用与复核，但当前审查版本尚未部署，Storage、Queue/Workflow 与认证的真实 E2E 仍待远程资源 Gate。Production D1 仍待 `0003`～`0006`，Production Worker 不存在，尚未部署或切流。** 本文只描述后续受控发布流程，不把本地测试、`wrangler deploy --dry-run` 或既有 Phase 1 部署记录当作 Production 验收。
 
-## 1. 当前与推荐部署拓扑
+## 1. 范围与当前事实
 
-当前代码并不适合把全部组件部署到同一个 Serverless 平台。前端是无状态 Vite SPA，当前已托管在 OpenAI Sites；`mvp-server` 仍使用本地 JSON 快照、本地音频目录和 `ffprobe`，因此现阶段运行在支持长期 Node 进程、Docker 与持久卷的 Railway 单实例上。Vercel 仅保留为遗留/备用发布路径，未经 owner 决策不修改或启用为主路径。
+当前目标架构是单个 Cloudflare Worker 承载 Vite Static Assets 和同源 API，并使用 D1、Queues、Workflows、Supabase private Storage 与应用 Cron。环境和资源名称以 [apps/cloudflare-worker/wrangler.jsonc](../apps/cloudflare-worker/wrangler.jsonc) 为准：
 
-推荐第一版拓扑：
+| 环境 | Worker | D1 | Supabase Storage bucket | Queue / Workflow |
+| --- | --- | --- | --- | --- |
+| `local` | `speechoptimizer-web-local` | `speechoptimizer-local` | 本地 R2 测试后端 | `speechoptimizer-local-analysis` |
+| `preview` | `speechoptimizer-web-preview` | `speechoptimizer-preview` | `speechoptimizer-preview-audio` | `speechoptimizer-preview-analysis` |
+| `production` | `speechoptimizer-web` | `speechoptimizer-production` | `speechoptimizer-production-audio` | `speechoptimizer-analysis` |
 
-| 层 | 推荐服务 | 当前用途 | 是否可立即接入 |
-| --- | --- | --- | --- |
-| DNS / TLS / WAF | Cloudflare | 域名解析、HTTPS、WAF、DDoS、API 入口保护 | 是，账号与域名准备好即可 |
-| Web 前端 | OpenAI Sites（当前） | `prototype/` Vite SPA、同源 `/api/*` 与 `/health` 代理、owner-only 访问 | 已部署并通过浏览器验收；平台侧配置 `API_ORIGIN` |
-| Web 前端备用路径 | Vercel（遗留/备用） | `prototype/` Vite SPA、Preview/Production Deployment | 仓库保留 `vercel.json` 与 Release job；是否启用需 owner 单独决策 |
-| API Runtime | Railway（当前） | 运行 Node 24、`ffprobe`、健康检查、单实例持久卷 | 已部署；需要平台侧生产变量与持久卷配置 |
-| API 镜像 | GitHub Container Registry | 保存经过 CI 验证的 API 容器镜像 | 是，Release workflow 已准备 |
-| 关系数据库 | Supabase Postgres | 目标生产持久化层，替换当前 JSON snapshot | **尚不能直接切换**，领域 schema/adapter 还未实现 |
-| 音频对象存储 | Supabase Storage 或 Cloudflare R2 | 目标生产音频对象存储，替换本地文件目录 | **尚不能直接切换**，对象存储 adapter 还未实现 |
-| 邮件 | Resend / Postmark / SES / 受控 SMTP | Magic Link 与通知邮件 | 需要真实 Provider 接线和投递验证 |
-| AI | OpenAI API | STT 与结构化反馈 | 需要生产 Key、预算/限流和真实 smoke |
-| 错误监控 | Sentry（推荐） | 浏览器/API 异常、release 关联、告警 | 尚未接线，建议生产前补齐 |
-| 可用性监控 | Better Stack / UptimeRobot / Grafana Cloud | `/health` 外部探测与告警 | 云服务创建后配置 |
+以下状态来自 [Cloudflare 免费层迁移计划](CLOUDFLARE_FREE_TIER_MIGRATION_PLAN.md) 的 2026-09-05 记录，后续执行必须重新核验，而不能仅依赖本段文字：
 
-### 为什么不把 API 直接放 Vercel / Cloudflare Workers
+- Phase 1 正式 Preview HTTP smoke 已通过：`/` 为 `200`、`/history` 为 `200`、`/health` 返回 JSON `200`、`POST /health` 返回 JSON `405`、未知 API 返回 JSON `404`。这些证据只覆盖静态资源和路由，不证明本轮功能资源已经上线。
+- Preview `speechoptimizer-preview` 的 `0003`～`0006` 首次 `migrations apply` 因 Cloudflare API timeout，post-list 仍显示四项待应用；主控只放行一次受控重试后四项逐个成功，exit `0`，最终 `migrations list` 返回 `No migrations to apply!`。Wrangler 输出未显示 backup/bookmark，不记录或声称存在备份/书签证据。
+- Production `speechoptimizer-production` 仍待应用 `0003_analysis_pagination_and_retention.sql`、`0004_account_deletion_and_storage_reservations.sql`、`0005_upload_tickets_and_dispatch_recovery.sql` 与 `0006_dlq_admin_recovery.sql`；本次未触碰 Production，后续仍须重新列出并应用**所有**未应用 migration。
+- 四个 Preview/Production Queue 与 DLQ 已存在，但当前 producer/consumer 均为 `0`；不得把资源存在误写为 Queue consumer、Workflow、Storage 或 Cron 已在当前线上版本生效。
+- Preview 的真实 E2E 仍缺可用的 Supabase server secret（`SUPABASE_SECRET_KEY` 或兼容的 `SUPABASE_SERVICE_ROLE_KEY`）和 `OPENAI_API_KEY`。完整认证 E2E 还取决于本手册第 4 节列出的运行时配置是否真实存在。
+- 本轮 Worker 高优先级代码纠偏、DLQ 管理闭环与 Wrangler generated types Gate 已完成本地验收；Preview D1 远端 apply/recheck 已完成，但当前审查版本尚未部署，Preview Secrets、真实流式 STT 与 Free CPU/完整性 Spike 仍未完成。
+- 当前审查版本的 Preview Worker 尚未部署；Preview 仍缺 Supabase server secret 与 `OPENAI_API_KEY`。Production D1、Production Worker、Production secrets、真实 E2E 与公网切流均未完成。
+- Production 的 `wrangler.jsonc` 目标配置已存在，但 Production Worker 不存在；独立 Production secrets、真实 E2E 与公网切流均**未验收**。
 
-当前 API 具有以下运行时要求：
+旧 OpenAI Sites + Railway Demo/Mock 路径不再是新功能的主发布路径。迁移期间它们只作为回退链保留；不得删除 Railway service、持久卷、Sites 配置或旧数据，也不得把其历史健康检查当作 Cloudflare Production 成功证据。
 
-- `node:http` 长期进程；
-- `ffprobe` 系统二进制；
-- `MVP_DATA_DIRECTORY` 下的 JSON 与音频文件持久化；
-- 当前 Webhook claim/队列是单进程语义；
-- 多实例前还需要共享数据库唯一约束/锁或队列。
+本次文档更新没有执行 D1、Secret、Worker、DNS、Queue、Workflow 或 Supabase 的任何远端写操作。
 
-因此第一版用**单实例 Docker + 持久卷**最接近现有实现。完成 Supabase Postgres / S3 adapter 后，才能安全去掉本地卷并考虑更强的水平扩展。
+## 2. 发布不变量
 
-## 2. 域名建议
+- 每次发布使用经审查的不可变 Git commit SHA；禁止从有未提交修改或未记录来源的工作树发布。
+- 本轮高优先级代码纠偏及其直接相关的回归测试必须先通过；不得把 Secret 配置、dry-run 或历史 HTTP smoke 当作替代 Gate。
+- 严格先 Preview、后 Production。Preview 的完整真实 E2E 未通过时，不创建 Production 部署、不写入 Production secret、不切换公网入口。
+- Preview 和 Production 的 D1、Storage bucket、Queue、Workflow、OAuth client、邮箱发送配置和全部 secrets 必须独立；Preview 禁止读取或写入 Production 数据。
+- `PAYMENTS_ENABLED=false` 是当前免费 Beta 的明确边界，不能用 Sandbox 或占位支付凭证冒充生产支付。
+- Worker 不接收完整生产音频上传；浏览器通过单对象、短期限的 Supabase signed upload URL 直传 private bucket。
+- 所有远端写步骤均由获授权的发布操作者执行并留存证据。本文中的写操作命令只作运行手册示例。
 
-当前线上入口：
+## 3. Preview 资源准备
 
-```text
-https://speechoptimizer.dengbodev.chatgpt.site/ -> OpenAI Sites 主站（owner-only）
-https://app.bo-pop.top/                    -> OpenAI Sites 自定义域名（owner-only）
-https://speechoptimizer-api-production.up.railway.app/health -> Railway API 健康检查
-Sites 同源 /api/*、/health                  -> Railway API（平台侧 API_ORIGIN）
-```
+### 3.1 发布前本地 Gate
 
-目标正式入口：
-
-```text
-https://speak-confidently.top/              -> OpenAI Sites 正式主站
-https://speak-confidently.top/auth/callback -> Google OAuth 与 Magic Link 共用回跳页
-https://speak-confidently.top/api/*         -> Sites 同源代理到 Railway API
-```
-
-生产域名切换时必须同步更新：Sites custom domain、DNS/验证记录、Railway `ALLOWED_ORIGINS`、Google OAuth authorized domain/redirect URI、Resend DKIM/SPF/DMARC、`MAGIC_LINK_FROM`、Waffo notify/redirect/goods URL，以及前端公开联系邮箱。内部 package 名、测试域名和 localhost 开发契约不随品牌域名迁移。
-
-`api.bo-pop.top` 不是当前验收必需入口；如后续需要独立 API 域名，必须以平台实际 target 为准重新设计 DNS、CORS 和 Webhook 配置。
-
-Cloudflare/OpenAI Sites 当前已确认：`app.bo-pop.top` 的 CNAME 指向 `custom-domains.chatgpt.site`，所有权验证 TXT 与 Cloudflare Custom Hostname 验证 TXT 已配置；Sites 域名对象 `status=active`、`provider_status=active`、`ssl_status=active`，匿名访问返回 HTTP 401，不再是 404。无需继续修改 DNS。
-
-Cloudflare 建议：
-
-- 独立 API 域名只有在 owner 决定启用时才创建；若启用，使用 Proxied 记录让 API 经过 Cloudflare WAF / DDoS 防护；
-- Sites 自定义域名验证记录按 Sites 平台要求维护；验证用 TXT/CNAME 不要代理；
-- Railway Production API 的 `ALLOWED_ORIGINS` 只允许真实前端 Origin，不保留 localhost；当前同源代理的 `API_ORIGIN` 和目标地址均属于 Sites 平台侧配置；
-- Webhook 路径不要缓存；对普通 API 默认禁用 CDN 缓存，静态前端由当前托管平台负责缓存。
-
-## 3. GitHub Actions 已初始化的工作流
-
-### CI：`.github/workflows/ci.yml`
-
-PR、`main` push 和手动运行都会执行：
-
-1. `pnpm/setup@v2` 安装 Node.js 24 + pnpm 11.25.0；
-2. 所有独立 package lockfile 的冻结依赖安装；
-3. 第一轮完整 `quality-gate`；
-4. 独立 `TZ=UTC` 第二轮完整 `quality-gate`；
-5. `git diff --check`。
-
-建议在 GitHub Ruleset / Branch Protection 中把 `MVP quality gate` 设为 `main` 的 Required status check。
-
-### Release：`.github/workflows/release.yml`
-
-生产发布默认关闭。只有 Repository variable：
-
-```text
-PRODUCTION_DEPLOY_ENABLED=true
-```
-
-存在时才会发布。
-
-自动发布只接受：
-
-```text
-main push -> CI success -> release
-```
-
-Release 会做两件互相独立的事情：
-
-1. 用 `apps/mvp-server/Dockerfile` 构建并推送 `ghcr.io/<owner>/<repo>-mvp-server`；
-2. 使用固定版本 Vercel CLI 的 `vercel pull -> vercel build --prod -> vercel deploy --prebuilt --prod` 发布 `prototype/`。
-
-当前线上主站使用 OpenAI Sites，以上 Vercel Release 是仓库中保留的遗留/备用路径，不是本次 Sites 部署的发布链。未经 owner 明确决定，不修改、启用或替换该 Vercel 流程；`PRODUCTION_DEPLOY_ENABLED` 继续保持关闭。
-
-Release 还会执行以下安全门禁：
-
-- 自动触发只接受成功的 `CI` 对 `main` 的 push，人工触发也只接受 `main`；
-- checkout 固定到已经通过 CI 的精确 commit SHA，并重新运行常规与 `TZ=UTC` 双轮完整门禁；
-- 所有 checkout 都关闭凭证持久化，GHCR 的 `packages: write` 只授予镜像发布 job；
-- GitHub checkout 使用 Node 24 runtime 的 `actions/checkout@v7`，pnpm/Node 使用官方 successor `pnpm/setup@v2`；
-- Docker 发布 action 使用 Node 24 runtime 的 `setup-buildx@v4`、`login@v4`、`build-push@v7`；
-- Vercel CLI 固定为 `59.11.2`，三个 Vercel Secret 缺少任意一个都会显式失败且不输出值；
-- 生产 release 使用单一 concurrency group，避免并行发布交叉覆盖。
-
-## 4. 备用 Vercel 路径的初始化参数
-
-本节仅适用于未来 owner 决定启用的 Vercel 遗留/备用路径，不影响当前已上线的 OpenAI Sites 主站。
-
-先在 Vercel 创建项目，Root Directory 选择：
-
-```text
-prototype
-```
-
-然后在 GitHub Repository Secrets 添加：
-
-```text
-VERCEL_TOKEN
-VERCEL_ORG_ID
-VERCEL_PROJECT_ID
-```
-
-Vercel Production Environment 至少设置：
-
-```text
-VITE_API_BASE_URL=https://api.bo-pop.top
-```
-
-上面的 API 地址仅是未来 Vercel/独立 API 域名路径的示例；当前 Sites 主站通过同源 `/api/*` 代理访问 Railway，默认使用相对路径，不依赖 `api.bo-pop.top`。
-
-`VITE_` 变量会进入浏览器 bundle，只允许放公开配置，禁止放 API key、数据库密码或其他服务端秘密。
-
-建议配置顺序：
-
-1. 先保持 `PRODUCTION_DEPLOY_ENABLED` 不存在或为 `false`；
-2. 建立 Vercel project 并完成 Preview 部署；
-3. 设置 `VITE_API_BASE_URL`；
-4. API Staging 健康后再启用生产 release；
-5. 最后把 GitHub CI 设置成 Vercel Production Deployment Check / GitHub required check。
-
-## 5. API Docker / Railway 当前部署
-
-Docker build context 必须使用仓库根目录：
+在选定的、干净且已审查的 commit 上运行，并先纳入本轮高优先级代码纠偏。任何失败都先修复或明确豁免，不部署本轮 Preview 功能版本：
 
 ```bash
-docker build -f apps/mvp-server/Dockerfile -t speechoptimizer-mvp-server:local .
+pnpm --dir apps/cloudflare-worker run check
+pnpm --dir apps/cloudflare-worker run test
+pnpm --dir apps/cloudflare-worker run build:prototype
+pnpm --dir apps/cloudflare-worker exec wrangler deploy --env preview --dry-run
 ```
 
-Railway 已存在 `SpeechOptimizer` project、`production` environment 和 `speechoptimizer-api` service。本次部署使用该现有 service，禁止为了同一用途创建第二个 service。当前仓库的部署设置：
+`build:prototype` 生成的 Static Assets 位于 `prototype/dist/client`；该目录由 Wrangler 配置引用。dry-run 只验证构建与配置，不能证明远程绑定、域名可达性或第三方 Provider 可用。
 
-```text
-Dockerfile path: apps/mvp-server/Dockerfile
-Healthcheck path: /health
-Persistent volume mount: /var/lib/speechoptimizer
-Replicas: 1
-Region: 美国西部
+### 3.2 Preview 资源核验
+
+先以只读方式记录以下项目的名称、环境和访问边界，不在终端、截图或工单中输出 secret 值：
+
+- Cloudflare Preview Worker 使用 `speechoptimizer-web-preview`，D1 binding 为 `DB`，且对应 Preview D1 而非 Production D1。
+- Preview Supabase bucket 为 private，只允许产品当前支持的 `audio/webm`，单对象最大 10 MiB；不得把 bucket 改为公开，也不得用公开 key 代替 server secret。
+- Wrangler 配置要求 Preview 使用独立的 Queue 和 DLQ：`speechoptimizer-preview-analysis` 与 `speechoptimizer-preview-analysis-dlq`；Workflow 名称为 `speechoptimizer-preview-analysis`；Cron 配置为每日 `17 3 * * *`。现有远端 Queue 的 producer/consumer 均为 `0`，必须在本轮版本部署后重新核验绑定与消费，不得提前标记为已启用。
+- `ALLOWED_ORIGINS` 只包含确认的 Preview origin；Google OAuth redirect URI、Resend 发件域和 Turnstile hostname 与实际 Preview URL 完全一致。
+- `SUPABASE_URL`、`SUPABASE_STORAGE_BUCKET`、`TURNSTILE_SITE_KEY`、大小/时长/免费额度参数是非敏感运行时变量；任何修改都应通过审查后的 Wrangler 配置发布，不应临时在 Dashboard 漂移。
+
+历史记录中曾确认 Preview Turnstile 验证 secret 已写入，但发布前仍应只读确认 secret 名称存在。名称存在不代表完整认证、Storage 或 Provider 流程已经通过。
+
+## 4. D1 migration 与 Secrets Gate
+
+### 4.1 D1 migration
+
+在 Preview 首次部署或源码新增 SQL 后，先查看远端未应用列表。以下命令访问远端，但第一条仅只读；第二条会写入 D1，必须获得发布授权后才执行：
+
+```bash
+# 只读：目标 DB 使用 wrangler.jsonc 的 DB binding。
+pnpm --dir apps/cloudflare-worker exec wrangler d1 migrations list DB --remote --env preview
+
+# 远端写入：会应用当前目录中全部未应用 migration，并由 Wrangler 提示确认与创建备份。
+pnpm --dir apps/cloudflare-worker exec wrangler d1 migrations apply DB --remote --env preview
+
+# 只读复核：应不再显示未应用 migration。
+pnpm --dir apps/cloudflare-worker exec wrangler d1 migrations list DB --remote --env preview
 ```
 
-Railway service 已部署并通过 `/health` 验收；当前运行模式为 `mock`。`MVP_DATA_DIRECTORY=/var/lib/speechoptimizer`、volume 挂载、服务端口和 Sites Worker 的 `API_ORIGIN` 都是平台侧运行时配置，源码本身不能单独证明这些配置已在云端生效。
+不要只针对单个 migration 手工执行或假设待应用列表固定，因为当前源码已经包含 `0003`～`0006`。记录执行前后的列表、操作者、时间、目标环境和 Wrangler 输出中的备份信息；不记录 SQL 中的用户数据。
 
-不要在仍使用本地 JSON snapshot 的阶段把 API 扩为多个 replica。多个实例会各自持有不同本地状态，并且 Webhook 单进程 claim 不具备跨实例互斥。
+D1 migration 采用向前兼容的 expand/migrate/contract 策略。Worker 版本回滚不会回滚数据库 schema 或数据：迁移失败按 Wrangler 的事务结果处理；已成功应用但需要纠正的 migration 只能通过经过审查的 forward repair 或已验证的恢复方案处理。
 
-Railway 会注入 `PORT`；Docker 镜像已经将 `HOST=0.0.0.0`，应用会读取平台注入的端口。当前 API 健康检查地址为 <https://speechoptimizer-api-production.up.railway.app/health>。
+### 4.2 Secrets 与运行时配置
 
-## 6. API Production 环境变量
+下面是当前代码完成完整 Preview 认证、Storage 和 STT E2E 所需的变量集合。它是代码依赖清单，**不是**这些值已在 Cloudflare 配置完成的声明。
 
-以 `apps/mvp-server/.env.example` 为完整键列表。生产环境至少需要分为四组管理：
+| 变量 | 用途 | 管理要求 |
+| --- | --- | --- |
+| `SUPABASE_SECRET_KEY` | Supabase signed upload、对象 metadata/Range 校验、对象删除 | Preview 独立 server secret；兼容期可改用 `SUPABASE_SERVICE_ROLE_KEY`，两者不要混用为浏览器变量 |
+| `OPENAI_API_KEY` | Workflow 中的真实 STT 调用 | Preview 专用、可撤销，绝不写入 D1、对象 metadata、日志或 `VITE_*` |
+| `COOKIE_SECRET` | 匿名 Cookie、Session 与 OAuth state 绑定签名 | 使用独立高熵值，不与任何旧服务共用 |
+| `TURNSTILE_SECRET_KEY` | Magic Link、Google OAuth、匿名分析的人机验证 | 仅 Worker Secret；站点 key 是非敏感变量，不能替代验证 secret |
+| `RESEND_API_KEY`、`MAGIC_LINK_FROM` | Magic Link 邮件投递与已验证发件地址 | 使用 Preview 发件身份；不得将邮件 token 记录到日志 |
+| `GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET` | Google OAuth code exchange | 使用 Preview OAuth client，redirect URI 必须与实际 Preview origin 匹配 |
 
-### 应用安全
+使用交互式 Secret 写入，避免把值放进 shell history、Git、`.env`、`--var` 或 `--secrets-file`。示例中的 `<SECRET_NAME>` 由获授权操作者逐项替换：
 
-```text
-NODE_ENV=production
-HOST=0.0.0.0
-MVP_DATA_DIRECTORY=/var/lib/speechoptimizer
-ALLOWED_ORIGINS=https://speechoptimizer.dengbodev.chatgpt.site,https://app.bo-pop.top
-COOKIE_SECRET=<至少 24 字符的高熵随机值>
+```bash
+# 远端写入；交互式粘贴单个值，终端不会把值作为命令参数保存。
+pnpm --dir apps/cloudflare-worker exec wrangler secret put <SECRET_NAME> --env preview
+
+# 只读：只核对名称，不显示值。
+pnpm --dir apps/cloudflare-worker exec wrangler secret list --env preview --format pretty
 ```
 
-`ALLOWED_ORIGINS` 使用逗号分隔的 Origin 列表，服务端会逐项去除首尾空白；两个 Origin 都不带尾部斜杠。
+每项 Secret 写入后只记录“名称存在、环境、写入时间、操作者和轮换标识”。不要将值粘贴到 PR、Issue、聊天记录、部署日志或截图。Production 必须在 Preview E2E Gate 通过后，使用全新的 Production 值重复此流程。
 
-### OpenAI
+## 5. Preview 部署与 smoke
 
-```text
-OPENAI_API_KEY
-OPENAI_STT_URL
-OPENAI_FEEDBACK_URL
-OPENAI_FEEDBACK_MODEL
+### 5.1 Preview 部署
+
+确认高优先级代码纠偏、migration、secrets 和非敏感运行时配置均满足 Gate 后，使用同一不可变 commit 发布。部署命令会创建或更新 Worker 配置及绑定，属于远端写操作：
+
+```bash
+COMMIT_SHA="$(git rev-parse HEAD)"
+pnpm --dir apps/cloudflare-worker exec wrangler deploy \
+  --env preview \
+  --var "APP_VERSION:${COMMIT_SHA}" \
+  --message "preview ${COMMIT_SHA}"
+
+# 只读：记录部署与版本 ID，供回滚使用。
+pnpm --dir apps/cloudflare-worker exec wrangler deployments list --env preview
+pnpm --dir apps/cloudflare-worker exec wrangler versions list --env preview
 ```
 
-### Auth / 邮件
+不要用 Dashboard 手工修改业务代码或临时绑定；不要把 secret 作为 `--var` 传入。默认部署会按版本化配置同步非敏感 vars，而 Secrets 不会被部署删除；若发现 Dashboard 中存在未纳入配置的运行时变量，先完成来源核验，不以 `--keep-vars` 掩盖漂移。
 
-```text
-AUTH_MODE=production
-GOOGLE_CLIENT_ID
-GOOGLE_CLIENT_SECRET
-RESEND_API_KEY
-MAGIC_LINK_FROM
+### 5.2 HTTP smoke
+
+Phase 1 已从可达网络完成基础 HTTP smoke：`/`、`/history`、`/health`、`POST /health` 和未知 API 分别得到预期的 `200`、`200`、`200` JSON、`405` JSON、`404` JSON。该结果不覆盖当前分支的 D1、Storage、Queue、Workflow、Cron 或第三方认证/Provider 绑定。每次发布本轮功能版本后，仍须从能正常访问 `workers.dev` 或 Preview 自定义域名的网络重新执行以下 smoke；网络错误只能说明该网络不可达，不能替代应用验收。
+
+以不含凭证的 `PREVIEW_BASE_URL` 执行并保存脱敏结果：
+
+```bash
+curl --fail-with-body -i "$PREVIEW_BASE_URL/health"
+curl --fail-with-body -i "$PREVIEW_BASE_URL/history"
+curl -sS -i -X POST "$PREVIEW_BASE_URL/health"
+curl -sS -i "$PREVIEW_BASE_URL/api/v1/not-found"
 ```
 
-`AUTH_MODE=production` 可以在 API 仍为 Mock AI/支付时单独启用真实登录。Google 授权、token 和 userinfo URL 已有官方默认值；如无代理或企业网关需求无需覆盖。Magic Link 通过 Resend HTTP API 投递，`MAGIC_LINK_FROM` 的域名必须先在 Resend 完成验证。真实认证模式还要求显式配置高熵 `COOKIE_SECRET` 与生产 `ALLOWED_ORIGINS`，并自动为账户和匿名 Cookie 添加 `Secure`。
+验收点：
 
-### Waffo
+- `/health` 返回 `environment=preview`、`mode=cloudflare`，并显示 assets、D1、Storage、Queue、Workflow 的绑定可用；响应不得泄露资源 ID、内部地址或 secret。
+- 首页与 `/history` 深链可加载 SPA。
+- `POST /health` 稳定返回 JSON `405`，未知 `/api/v1/*` 稳定返回 JSON `404`。
+- 响应头中的 Cookie 仅在认证流测试中出现，且不得出现在截图、日志或工单附件中。
 
-支付上线前继续遵守 `.waffo/integration-manifest.json` 和 canonical handoff。未决人工 decision、Sandbox/Go-Live 未完成时，不得把占位符替换成 AI 猜测值。
+健康检查只能证明 binding 在运行时可见，不能替代真实 D1 写入、Supabase signed upload、Queue/Workflow 或 OpenAI 的端到端测试。
 
-当前 `NODE_ENV=production` 会对 Waffo 配置 fail closed；若首版明确要以“支付完全关闭”方式上线，应单独实现并验证 `PAYMENTS_ENABLED=false` 产品能力，而不是把 Sandbox/假密钥当生产配置。
+## 6. Preview 真实 E2E Gate
 
-当前 Railway 线上实例仍以 `mock` 模式运行，健康检查和浏览器验收不依赖上述真实 Provider。`ALLOWED_ORIGINS`（API CORS）由 Railway 平台变量管理；Sites Worker 的 `API_ORIGIN` 由 Sites 平台环境配置管理。它们属于部署平台侧配置，不能仅凭源码、`.env.example` 或 Git diff 断言线上值。
+使用专用 Preview 测试账号、测试邮箱、测试 Google 账号和无敏感内容的短 `audio/webm`（不超过 10 MiB）。任何一项失败都阻止 Production 发布。
 
-## 7. Supabase 的正确接入位置
-
-Supabase 适合作为下一阶段的生产数据层，但现在不能只创建一个 `DATABASE_URL` 就切换，因为运行时代码尚未使用 PostgreSQL。
-
-推荐迁移顺序：
-
-1. 定义 `app` schema 的用户、分析、权益、订单、退款、订阅、Webhook 幂等和审计表；
-2. 把 `PersistentStore` / JSON repository 改成 Postgres adapter；
-3. 用唯一约束实现 Webhook event id、request id、幂等 key 的跨实例互斥；
-4. 为音频实现 S3-compatible object-store adapter；
-5. 创建 Supabase 私有 bucket，并保持音频默认私有；
-6. 做 JSON -> Postgres / local objects -> Storage 的迁移脚本；
-7. 重新执行恢复、删除、退款、权限和隐私测试；
-8. 完成后才允许移除 API persistent volume 或增加多个 replica。
-
-当前代码不使用 Supabase Auth，因此第一阶段不建议同时替换现有 Magic Link / Google Auth。先迁移持久化和对象存储可以把上线风险控制在可验证范围。
-
-## 8. 上线环境分层
-
-建议至少建立：
-
-```text
-local       本机 mock / fixture
-preview     Vercel PR Preview，仅连接隔离 API/测试数据
-staging     真实 OpenAI、真实邮件测试域、支付 Sandbox
-production  真实用户数据和正式域名
-```
-
-禁止 Preview 使用 Production 数据库、Storage service key、Waffo Production key 或生产 OAuth client secret。
-
-## 9. 正式上线前 Gate
-
-### P0：必须完成
-
-- GitHub `main` branch protection + Required CI；
-- 前端托管项目和真实域名（当前 Sites 已完成；若采用 Vercel 则另行完成其 production 项目）；
-- API Docker Staging 部署，`/health` 外网 200；
-- 生产 Cookie/CORS/HTTPS 校验；
-- 真实 OpenAI STT + feedback smoke；
-- 真实 Magic Link 邮件投递；
-- Google OAuth（若首版保留 Google 登录）；
-- API 数据持久化方案已明确并完成备份策略；
-- 外部 uptime/error alert；
-- 生产环境 secrets 全部放平台 Secret Store，不进 Git；
-- Production E2E：Web -> API -> 上传 -> STT -> feedback -> report -> history -> delete；
-- 对数据删除、音频生命周期和隐私文案做最终人工核对。
-
-### P1：强烈建议
-
-- Supabase Postgres / Storage 迁移完成后再正式扩大流量；
-- Sentry release + source map；
-- Cloudflare rate-limit / WAF 规则；
-- 数据库 PITR / Storage backup/restore 演练；
-- staging 与 production 的独立 OAuth / 邮件 / AI / 支付凭证；
-- GitHub Environment `production` 增加人工 approval。
-
-## 10. 当前状态与仍未完成事项
-
-截至 2026-09-04，以下部署动作已经完成并有平台侧证据：
-
-- OpenAI Sites 主站部署成功并启用 owner-only 访问；同源 `/api/*` 与 `/health` 代理已上线；
-- Railway `speechoptimizer-api` 已部署，`/health` 返回 HTTP 200，运行模式为 `mock`；
-- Railway 500 MB 持久卷已挂载到 `/var/lib/speechoptimizer`，当前保持单实例；
-- `app.bo-pop.top` 的 Sites 域名对象、DNS 验证和 SSL 已激活，匿名公网访问返回 HTTP 401 登录门槛；
-- PR #1 已于 2026-09-04 合并，合并提交为 `1c38e65`；部署源码修复提交 `3a912b7` 与交接文档提交 `deeeca3` 已位于 `codex/cicd-bootstrap`，PR #2 是将二者同步到 `main` 的路径，合并后 `main` 将包含部署与文档提交。
-
-以下事项仍未完成，或不属于本次 Demo/Mock 部署范围：
-
-- PR #2 是既定源码同步路径；合并时 `main` 会包含 `3a912b7` 的 4 个部署文件变更及 `deeeca3` 的文档回写，不需要另行决定另一条同步路径；
-- OpenAI 真实 STT/反馈、邮件、Google OAuth、Waffo 支付及其生产凭证/业务决策；
-- Supabase schema、Postgres adapter、私有 Storage bucket、对象存储 adapter 和数据迁移；
-- 生产备份/恢复演练、错误监控、日志聚合、uptime 告警和容量/成本策略；
-- 若 owner 选择启用 Vercel 遗留/备用路径，再创建/链接 Vercel Project、配置 secrets 并单独验收；当前不修改或启用该流程；
-- 真实 Provider 接入后的 staging/production E2E、删除/隐私与支付人工验收。
-
-不要把“平台侧配置已生效”从源码单独推断出来：`API_ORIGIN`、CORS `ALLOWED_ORIGINS`、Railway volume 挂载和 Sites 域名路由都必须以平台配置、健康检查和浏览器/HTTP 证据为准。
-
-## 11. 2026-09-04 插件连接与远程初始化状态（含当前交接事实）
-
-本轮已实际通过已连接插件读取云端状态，而不是只停留在文档规划：
-
-| 服务 | 插件状态 | 已确认事实 | 当前动作边界 |
-| --- | --- | --- | --- |
-| Cloudflare | 连接存在；`bo-pop.top` 记录已按部署需要配置 | `app.bo-pop.top` CNAME 指向 `custom-domains.chatgpt.site`，Sites/OpenAI 与 Cloudflare 验证 TXT 已配置；Sites 域名 `status/provider_status/ssl_status` 均为 `active` | 当前无需继续修改 DNS；`api.bo-pop.top` 不是本次验收必需入口，如后续启用必须重新核对 Railway target、CORS 和 Webhook |
-| Supabase | 已连接，可管理项目 | 已在 organization `rwzohujdebahkmqfxloy` 创建独立 `SpeechOptimizer`，project ref `qnmxxvnypmfzwclyyfhr`，region `us-west-1`，状态 `ACTIVE_HEALTHY`；插件返回创建成本 `$0/month` | 当前只完成项目资源创建；业务 Postgres schema/adapter 与对象存储 adapter 尚未实现，因此不把“项目已创建”表述为生产持久化已切换 |
-| Vercel | 连接存在，但当前无可列出的 Team/Project 上下文 | Vercel 仅保留为遗留/备用发布路径；当前主站由 OpenAI Sites 托管 | 未经 owner 决策不创建/链接或启用 Vercel production 路径，不修改现有 Release workflow |
-| GitHub | `gh` 已认证，具备 `repo` / `workflow` scope | PR #1 已于 2026-09-04 合并，merge commit `1c38e65`；PR #2 是将 `3a912b7` 部署变更和 `deeeca3` 文档回写同步到 `main` 的既定路径，合并后 `main` 将包含二者。生产 Release 仍关闭 | 按 PR #2 的文件边界与检查完成同步；不要把 `AGENTS.md` 删除带入任何提交 |
-| Railway | connector 已暴露，且本机 `railway 5.49.1` 已完成 OAuth 登录并链接现有资源 | 已存在独立 `SpeechOptimizer` project、`production`、`speechoptimizer-api`、generated domain；500 MB volume 已 Ready 并挂载 `/var/lib/speechoptimizer`，当前部署为 `mock`，`/health` HTTP 200 | 保持现有 service 与单实例 volume；真实 variables/secrets、Provider、备份和监控按后续生产计划单独配置，不创建第二个同用途 Service |
-
-### 11.1 当前后续工作所需的最少人工确认
-
-owner 已完成本阶段两个关键选择：Supabase 使用当前 organization 下的独立 `SpeechOptimizer` project；Sites 自定义域名使用 `app.bo-pop.top`。当前主站与 API 已上线，API 通过 Sites 同源代理访问；`api.bo-pop.top` 是否需要启用留待后续单独决策。
-
-下一步执行顺序：
-
-1. 通过 PR #2 将线上部署提交 `3a912b7` 与文档提交 `deeeca3` 同步到 `main`；合并后核验 `main` 的 CI，保持 `AGENTS.md` 删除在提交范围之外；
-2. 保持现有 Railway `speechoptimizer-api` 单实例和 `/var/lib/speechoptimizer` volume，继续用平台健康检查和浏览器报告做运行态验收；
-3. 按生产优先级配置真实 OpenAI、邮件、Google OAuth、Waffo、备份、监控与告警，并在 staging 完成真实 Provider E2E；
-4. 实现并验证 Supabase Postgres/S3 adapter 后，再决定是否迁移出 Railway persistent volume 或扩大实例数；
-5. 只有在 owner 决定采用 Vercel 备用路径时，才建立/链接 Vercel Project、设置 secrets 并重新验收，不把 Vercel 流程当作当前 Sites 主站发布链。
-
-## 12. 当前线上验收事实（2026-09-04）
-
-本节是部署手册的当前事实入口；第 11 节中较早的初始化记录保留为历史证据，若与本节冲突，以本节为准。
-
-### 12.1 访问入口与平台状态
-
-| 项目 | 当前事实 |
+| 流程 | 必须观察到的结果 |
 | --- | --- |
-| Sites 主站 | [speechoptimizer.dengbodev.chatgpt.site](https://speechoptimizer.dengbodev.chatgpt.site/) 已部署成功，owner-only；浏览器验收需要当前 ChatGPT 账号登录 |
-| Sites 部署对象 | project `appgprj_6a9ab0d858c08191b9891e7aa6ce315c`；version `appgver_7bd145986cc08191925ac77783dd005e`；deployment `appgdep_6a9ab1ed04648191b0f00ed8a7387ab6` |
-| 自定义域名 | [app.bo-pop.top](https://app.bo-pop.top/) 的 Sites 域名对象 `appgdom_6a9ab280354881918e2625eba7f9afd2` 当前 `status=active`、`provider_status=active`、`ssl_status=active`；匿名公网访问返回 HTTP 401 登录门槛，不再是 404 |
-| Railway API | [健康检查](https://speechoptimizer-api-production.up.railway.app/health) HTTP 200；`status=ok`、`mode=mock`；服务 `speechoptimizer-api` 位于美国西部 |
-| 持久化 | Railway 500 MB 持久卷挂载 `/var/lib/speechoptimizer`；当前单实例，不应在迁移前扩容 |
-| 同源代理 | Sites `/api/*` 和 `/health` 转发到 Railway API；浏览器不依赖第三方 Cookie |
+| Magic Link | Turnstile 校验、邮件送达、链接只能消费一次、过期/重复消费返回稳定错误、Session Cookie 可建立和注销 |
+| Google OAuth | 发起和回调都在同一浏览器完成，state Cookie 绑定有效，错误或完成后旧 state Cookie 被清除 |
+| 上传 | 创建分析有 Idempotency-Key；Worker 只签发当前分析的单对象 URL；浏览器直传 private bucket；错误大小、MIME、SHA-256 或 WebM 魔数被拒绝 |
+| 分析 | `audio-complete` 后任务进入 Queue/Workflow；真实 OpenAI STT 成功后可读报告和历史；重复完成仅接受完全一致的请求，篡改请求返回冲突 |
+| 失败和重试 | Provider 超时/拒绝能落为稳定错误状态；可重试任务不重复生成报告或额外消耗额度；不可重试任务不进入无界重试 |
+| 隐私和清理 | 删除分析会删除关联对象；账户删除会撤销 Session、删除关联数据与对象；Cron 运行后处理孤儿、过期认证记录和延迟删除 |
+| 免费护栏 | `FREE_TIER_GUARD_LEVEL=80/90/95` 的降级行为与代码一致：80 暂停匿名分析，90 暂停新分析，95 进一步暂停新上传，读取路径保持可用 |
 
-当前已生成的报告可通过 [浏览器端测试报告](https://speechoptimizer.dengbodev.chatgpt.site/analysis/5c78b3c8-39b1-4a7c-a317-b28cb74a7b5f/report) 查看。真实 Chrome 验收覆盖上传合成 WAV、发起分析、跳转报告和展示语速、填充词、长停顿、有效语音等指标。
+对 Cron 和队列处理，必须从 Preview 的实际任务状态、Worker 日志、Queue/DLQ 和 Workflow 结果中取证；本地 `wrangler dev --test-scheduled` 或单元测试不能代替远程 Cron 证据。日志仅保留事件名、状态码、分析 ID 或经过审查的摘要，严禁记录 Cookie、OAuth code/state、Magic Link token、音频内容、转写全文或 Provider 响应体。
 
-### 12.2 源码与平台配置边界
+完成 E2E 后，发布负责人应记录：commit SHA、部署/版本 ID、D1 migration 列表、secret 名称清单、测试时间、测试账号标识（脱敏）、每项验收结果、错误率与回滚候选版本。只有这些证据齐全，才可进入 Production 变更审批。
 
-- PR #1 已于 2026-09-04 合并，合并提交为 `1c38e65a6c88212225fea4c70587b33a3f9ffb78`。
-- 线上部署所需 4 个文件变更由 `3a912b799ae1e01f5cae6fd5c6d0d87a39c9f82a`（短 SHA `3a912b7`）承载，交接文档回写由 `deeeca308d9fb4fe6bfa52048dc7c78e1ef5b105`（短 SHA `deeeca3`）承载；二者均在 `origin/codex/cicd-bootstrap`，PR #2 是同步到 `main` 的既定路径，合并后 `main` 将包含部署与文档提交。部署文件为：`apps/mvp-server/Dockerfile`、`prototype/.openai/hosting.json`、`prototype/worker/index.js`、`prototype/tests/sites-worker.test.mjs`。
-- `API_ORIGIN`、Sites 同源代理目标、Railway `ALLOWED_ORIGINS`/CORS、volume 挂载和域名路由属于平台侧配置。源码只能提供配置入口和契约，不能单独证明平台侧配置已生效；当前事实以平台状态、HTTP 检查和浏览器报告为准。
-- 当前部署是 Demo/Mock，不等于完整生产模式。模型 API、支付、邮件、Google OAuth、生产数据库/对象存储、备份与可观测性仍待接入。
-- `.github/workflows/release.yml` 中的 Vercel production release 是遗留/备用路径；当前主站使用 Sites，未经 owner 决策不得修改、启用或替换该 Vercel 流程。
+## 7. Production 发布 Gate
+
+Production 当前不应执行部署或公网切流。仅当本轮高优先级代码纠偏验收通过、Preview 全部真实 E2E 通过、回滚版本已确定、负责人批准且旧 Sites/Railway 回退链可用时，才按与 Preview 相同的顺序执行：
+
+1. 在 Production D1 上先 `migrations list`，再以确认的 forward-compatible SQL 执行 `migrations apply`，并记录备份信息。
+2. 写入完全独立的 Production secrets；不得复制 Preview server secret、OpenAI key、Cookie secret、OAuth client secret 或 Resend key。
+3. 用同一个已验收 commit 构建、dry-run、部署 `--env production`，记录版本 ID；先验证 Worker 默认地址，后按单独批准的域名/路由计划切流。
+4. 以正式域名重新执行 HTTP smoke、认证、上传、分析、隐私删除和失败路径 E2E。
+5. 仅在 Production smoke 成功后才允许变更公网 DNS/路由。DNS 不是日常代码回滚机制。
+
+Production 的 `ALLOWED_ORIGINS`、Google OAuth redirect URI、Resend 发件域和 Turnstile hostname 必须在切流前再次逐项核对。不要假设 `speak-confidently.top` 已经指向 Cloudflare Worker，也不要因 Wrangler 配置存在就宣称已切流。
+
+## 8. 回滚与故障处置
+
+### 8.1 Worker 版本回滚
+
+发布前记录最后一个已验证版本 ID。若新 Worker 导致严重回归，先停止进一步切流，再由获授权操作者回滚到该版本：
+
+```bash
+# 远端写入：<KNOWN_GOOD_VERSION_ID> 必须来自部署记录，而不是猜测。
+pnpm --dir apps/cloudflare-worker exec wrangler rollback <KNOWN_GOOD_VERSION_ID> \
+  --env production \
+  --message "rollback to verified version"
+```
+
+Preview 故障同样使用 `--env preview`。回滚后重新检查 `/health`、关键读取路径、错误率和 Queue/DLQ。不要删除失败版本、D1、Storage bucket 或 Queue，以保留调查证据。
+
+### 8.2 数据与服务降级
+
+- D1 已应用 migration 时不要将 Worker rollback 当作数据库 rollback；使用已验证备份或前向修复方案。
+- 若容量或第三方错误需要立即降级，当前代码支持通过审查后的配置发布提高 `FREE_TIER_GUARD_LEVEL`：`80` 暂停匿名分析，`90` 暂停新分析，`95` 暂停新上传。该机制不是通用维护模式，仍须观察登录、历史和报告读取。
+- 保持旧 Sites/Railway Demo/Mock 路径和数据不变，直到 Cloudflare Production 已稳定运行至少 72 小时且 owner 明确批准下线；若需将流量回退到旧路径，DNS/路由变更必须单独获批并留证。
+
+## 9. Production 后 72 小时观察清单
+
+在 Production 切流后，首期保持每日最多 50 次分析的免费 Beta 限额，不提高配额、不下线旧回退链。每个检查周期记录时间、环境、观察者、结论和关联版本 ID。
+
+| 时间点 | 检查项 | 触发动作 |
+| --- | --- | --- |
+| 切流后 0-2 小时 | Worker HTTP 5xx、`/health`、静态资源、认证失败、Storage 签发/完成、Queue backlog/DLQ、Workflow 成功率 | 严重回归先停止切流或回滚 Worker 版本 |
+| 每日 | Workers 请求量/CPU/错误率、D1 行读写/存储、Queue 操作与 DLQ、Workflow 步数/失败、Supabase Storage/egress、OpenAI 错误与成本、Turnstile/邮件/OAuth 异常 | 接近资源阈值时提高 `FREE_TIER_GUARD_LEVEL`，暂停放量并调查 |
+| 每日 | 分析删除、账户删除、Cron 清理、孤儿对象与过期认证记录 | 清理失败不删除证据；先修复后以受控任务重试 |
+| 72 小时结束 | 所有 E2E 主链仍可复现、无未解释的 DLQ/Workflow 积压、恢复方案可用、无密钥/隐私泄露、资源未越过护栏 | 由 owner 决定是否提高配额、延长观察或开始旧服务下线评估 |
+
+Cloudflare 与 Supabase 的用量控制面是事实源；应用只根据确认的运营读数执行 `FREE_TIER_GUARD_LEVEL` 降级。出现异常时先保留脱敏日志、版本 ID、D1 migration 状态和资源用量快照，再决定修复、降级或回滚。
+
+## 10. 交付证据最小集
+
+每次 Preview 或 Production Gate 至少归档以下非敏感证据：
+
+- 已审查 commit SHA、`git status --porcelain` 为空的记录、`check`/`test`/build/dry-run 结果；
+- D1 migration 前后列表和备份记录；
+- 各环境 secret **名称**存在的清单，不含值；
+- Worker deployment/version ID、时间与回滚候选版本；
+- 脱敏的 smoke/E2E 结果、Queue/Workflow/Cron 取证和用量观察；
+- 已知失败项、负责人、下一步和是否允许推进到下一 Gate 的明确结论。
+
+迁移计划的完成状态只能在上述真实远程证据产生后更新。本手册不会替代该计划，也不会把未验证事项提前标记为完成。

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { logEvent } from "../lib/logEvent.js";
 
-const MIME_TYPES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
+const MIME_TYPES = ["audio/webm;codecs=opus"];
 
 /** 统一管理浏览器麦克风权限、MediaRecorder 生命周期和音频 Blob。 */
 export function useRecorder(maxSeconds = 120) {
@@ -74,7 +74,13 @@ function initialState() {
 
 function startRecorder(stream, refs) {
   const mimeType = supportedMime();
-  const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+  if (!mimeType) {
+    stopTracks(stream);
+    refs.setState((value) => ({ ...value, status: "unsupported", error: "This browser cannot record WebM/Opus audio." }));
+    logEvent("recording.unsupported_mime");
+    return;
+  }
+  const recorder = new MediaRecorder(stream, { mimeType });
   refs.streamRef.current = stream;
   refs.recorderRef.current = recorder;
   refs.chunksRef.current = [];

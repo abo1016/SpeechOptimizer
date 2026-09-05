@@ -1,7 +1,9 @@
 # SpeechOptimizer MVP 当前开发交接
 
 > 交接日期：2026-09-03（Asia/Shanghai）
-> 最近更新：2026-09-05（Asia/Shanghai）。正式品牌域名改为已购买的 `speak-confidently.top`；Cloudflare 委派与 Sites/Resend DNS 已配置，Sites SSL 已激活且路由正在重新部署，Resend 正在验证。Google OAuth 与 Railway 已同步新 Origin、回调和发件地址，生产部署仍暂缓到平台验证和本地质量门禁全部完成。
+> 最近更新：2026-09-05（Asia/Shanghai）。Cloudflare Worker 的生产对象存储已从 R2 切换为 Supabase Storage；代码、常规/UTC 双轮全量质量门禁与 Preview dry-run 已通过。真实 Supabase Preview E2E 仍待 SpeechOptimizer 专用 project/private buckets/server secret。
+
+2026-09-05 后续远程资源核验：SpeechOptimizer Supabase project `qnmxxvnypmfzwclyyfhr` 已存在且健康；已创建 private bucket `speechoptimizer-preview-audio` 与 `speechoptimizer-production-audio`，两者均限制单文件 10 MiB 且仅允许 `audio/webm`。Worker Preview/Production 已写入真实 `SUPABASE_URL=https://qnmxxvnypmfzwclyyfhr.supabase.co`。当前唯一 Supabase Storage 凭证缺口是 Cloudflare Worker 的 server secret；Preview 现有 secret 列表尚无 `SUPABASE_SECRET_KEY` / `SUPABASE_SERVICE_ROLE_KEY`，因此尚未执行真实 Supabase Preview 部署/E2E。
 > 工作区：`/Users/bopop/Documents/SpeechOptimizer`
 > Git 分支：`codex/cicd-bootstrap`
 > 远端同步：部署与文档已通过 PR #2 合入 `origin/main`；当前认证生产化改动仍只存在于本地 `codex/cicd-bootstrap` 工作树，尚未 commit/push。
@@ -15,18 +17,18 @@
 | Field | Current State |
 | --- | --- |
 | **Goal** | 完成 SpeechOptimizer 整个 MVP，并达到当前代码、测试、HTTP、浏览器和上线边界可审计的交付质量；在不伪造外部证据的前提下完成 Waffo 官方 Node SDK 3.0.1 集成，并按第 15.16 节继续上线链。 |
-| **Current Phase** | Cloudflare 免费层迁移 Phase 1 已完成本地实现、常规/UTC 双轮全量门禁、固定 commit 版本化与正式账户 Preview 部署；当前仅剩外部 HTTP smoke 未闭环。既有 Sites + Railway Demo/Mock 继续作为迁移期间回退路径。 |
-| **Current Objective** | 以 `docs/CLOUDFLARE_FREE_TIER_MIGRATION_PLAN.md` 为执行来源，完成 Cloudflare Worker Preview 发布验证后进入 Phase 2：D1 与真实认证迁移。 |
-| **Completed** | 新增 `apps/cloudflare-worker/`，包含 Wrangler 三环境配置、Workers Static Assets SPA fallback、Fetch Router、环境类型、结构化日志、`/health`、JSON 404/405、定向测试和独立 pnpm 锁文件；本地 Wrangler/Miniflare 已验证首页、SPA 路由、健康检查和 API 错误契约，Preview 配置 dry-run 已通过。既有 Sites + Railway Demo/Mock 仍在线作为迁移回退。 |
-| **In Progress** | Phase 1 仅剩最终 HTTP 验收：Wrangler OAuth 已具备 `workers_scripts (write)`；Cloudflare Phase 1 源码已形成固定 commit `ec7eef7fce7e3bf16a34ece080c22be16e3019f5`，并以该完整 SHA 作为 `APP_VERSION` 重发正式 Preview。需要从不受当前 1010/直连超时影响的网络复核首页、SPA 深链、`/health`、JSON 404/405。既有 Sites + Railway Demo/Mock 继续作为迁移回退链。 |
-| **Next** | 1）按发布流程部署 `speechoptimizer-web-preview` 并复核远程首页、SPA 路由、`/health`、JSON 404/405；2）进入 Phase 2 新增 D1 migrations/adapters 与真实认证；3）Preview 与 Production 的 D1/R2/Secrets 必须使用独立绑定，迁移完成前保留旧 Railway/Sites 回退链。 |
-| **Blockers** | **Phase 1 远程 Gate：** Cloudflare 账号写权限、固定 commit 和正式目标账号部署均已完成。固定源码 commit 为 `ec7eef7fce7e3bf16a34ece080c22be16e3019f5`；以该 SHA 作为 `APP_VERSION` 重发后的 Version ID 为 `d58d696d-9175-4e56-a3d1-52a7d36039af`，Cloudflare API 确认最新 deployment 100% 指向该版本。当前唯一阻塞是执行环境访问 `workers.dev` 经代理返回 Cloudflare 1010、禁用代理后连接超时，因此远程 HTTP smoke 仍缺可用网络证据。**Phase 2 外部依赖：** Google/Resend/正式域名与后续 D1/R2/Secrets 仍需按 Preview/Production 环境分别配置。迁移完成前不得下线现有 Sites + Railway 回退链。 |
+| **Current Phase** | Cloudflare 免费层迁移 Phase 2～4 本地实现继续收口；对象存储已从 R2 pivot 到 Supabase Storage，Preview/Production Wrangler 已去掉 R2 binding。Preview D1 `0003`～`0006` 已完成受控应用与复核，但当前审查版本尚未部署；Supabase project/bucket 与 Preview Turnstile 已就绪，真实 Preview Storage E2E 尚待 server secret 与 OpenAI 凭证。既有 Sites + Railway Demo/Mock 继续作为回退路径。 |
+| **Current Objective** | 以 `docs/CLOUDFLARE_FREE_TIER_MIGRATION_PLAN.md` 为执行来源，完成 Supabase Storage 真实 Preview 配置与 E2E，再按 Preview-first Gate 切入 Production。 |
+| **Completed** | D1 migrations/repository、真实认证边界、Web Crypto、Turnstile 接口、provider-neutral Storage adapter、Supabase signed upload、SHA-256 元数据/4 字节魔数校验、Queue/Workflow、可信 STT 时长门禁、取消/重试、应用 Cron 清理、历史/比较/账户删除与 `PAYMENTS_ENABLED=false` 已实现；账户删除会删除账户、其 session、同邮箱 Magic Link、分析记录和关联对象，未关联账户的 OAuth state 由 Cron 过期清理；匿名可信时长限制 60 秒；重复完成篡改被拒绝；`FREE_TIER_GUARD_LEVEL` 支持 80/90/95 分级降级。免费 Beta 当前仅使用 `quota_counters`，holds/ledger/grants 是未来支付启用范围。 |
+| **In Progress** | 收口 Provider timeout/idempotency、日志脱敏与定向回归；Preview D1 `0003`～`0006` 已通过一次受控重试完成应用，最终 list 为 `No migrations to apply`，但当前审查版本尚未部署，真实远程 Gate 仍需要 Worker server secret 与 OpenAI 凭证。 |
+| **Next** | 1）由 owner 将可撤销的 Preview `SUPABASE_SECRET_KEY`（或兼容期 service-role key）安全写入 Worker Secret；2）补 `OPENAI_API_KEY`；3）以审查后的固定 commit 重新部署 Preview 并执行真实直传/Workflow/删除/清理 E2E；4）Preview Gate 通过后再处理 Production D1 `0003`～`0006`、独立 secrets 与 Worker 部署。Supabase project、两个 private bucket、`SUPABASE_URL` 与 Preview Turnstile 已就绪。 |
+| **Blockers** | 当前没有 R2 或 Turnstile 账号级 blocker。Supabase project/private buckets、`SUPABASE_URL`、Preview `TURNSTILE_SECRET_KEY` 与 Preview/Production `TURNSTILE_SITE_KEY` 已就绪；真实 Preview 仍缺 Worker `SUPABASE_SECRET_KEY`（或兼容 service-role key）和 `OPENAI_API_KEY`。当前审查版本的 Preview Worker 尚未部署，Production D1 `0003`～`0006` 仍未触碰、Production Worker 仍不存在；因此本地通过与 Preview D1 完成不能替代真实 Supabase Storage E2E。 |
 | **Architecture Decisions** | 既有域名/Supabase/单实例持久卷决定保持。Release 新增：workflow_run 必须验证 CI success + push + main，并 checkout 对应 immutable SHA；人工发布仅 main；生产开关默认关闭；GHCR 和 Vercel 独立 job 共享同一 verify gate；Vercel 使用固定 59.11.2 + prebuilt production deploy；checkout 不持久化凭证。 |
 | **Failed Attempts** | 既有历史与 Luna 通道失败见 15.13。Actions run `33868265419` 使用 `pnpm/action-setup@v6` 后在 Setup pnpm 卡住超过两分钟；官方 release 已声明该 action 由 `pnpm/setup` 继任，因此主动取消该 run，不再重试旧 action。切换 `pnpm/setup@v2` 后恢复正常。 |
-| **Verification** | **Cloudflare Phase 1：** `pnpm --dir apps/cloudflare-worker run check` 通过；Worker 路由定向测试 4/4；本地 Wrangler/Miniflare 实测 `/` 200、`/history` 200 SPA fallback、`/health` 200 JSON、POST `/health` 405 JSON、未知 `/api/v1/*` 404 JSON。`CI=1 node scripts/quality-gate.mjs all --require-feature-tests` 与 `CI=1 TZ=UTC node scripts/quality-gate.mjs all --require-feature-tests` 均通过。固定 commit `ec7eef7fce7e3bf16a34ece080c22be16e3019f5` 后再次执行 `CI=1 node scripts/quality-gate.mjs cloudflare`，check、4/4 测试、Preview dry-run 全通过，且 dry-run 未出现 D1/R2/Secrets 绑定。Wrangler OAuth 已确认具备 `workers_scripts (write)`；以完整 commit SHA 作为 `APP_VERSION` 重发成功，Version ID `d58d696d-9175-4e56-a3d1-52a7d36039af`，Cloudflare API 确认最新 deployment 以 100% 流量指向该版本。正式地址从当前代理出口 smoke 返回 Cloudflare 1010，禁用代理后直连超时，因此不声称远程 HTTP Gate 已通过。 |
+| **Verification** | 历史 Supabase pivot 全量门禁证据保留于 15.17；Worker 定向测试代码现有 30 项，其中 C3 Queue/Provider/日志脱敏回归 6 项。当前整包 `check` 与综合 Worker 测试受并发工作区 `src/repository.js` 语法未完成状态阻断；Preview dry-run 尚未重跑。`git diff --check` 以当前工作树为准。 |
 | **Git State** | 当前工作树位于 `codex/cicd-bootstrap`；Cloudflare Phase 1 已形成 checkpoint commit `ec7eef7fce7e3bf16a34ece080c22be16e3019f5`（`feat(cloudflare): bootstrap free-tier preview worker`），任务外 `AGENTS.md` 删除未暂存、未进入该提交。当前未执行 push。 |
 | **Important Files** | `docs/CLOUDFLARE_FREE_TIER_MIGRATION_PLAN.md`；`apps/cloudflare-worker/{wrangler.jsonc,src/,test/,README.md}`；`scripts/quality-gate.mjs`；`docs/MVP_HANDOFF_2026-09-03.md`；根 `AGENTS.md` 仍是任务外删除状态，不得带入提交。 |
-| **Session Summary** | 2026-09-05：Phase 1 代码、本地 Miniflare Gate、常规与 UTC 双轮全量质量门禁均已完成；用户完成 Wrangler OAuth 后，正式目标账号 Preview 已部署。随后形成固定源码 commit `ec7eef7fce7e3bf16a34ece080c22be16e3019f5` 并以该 SHA 作为 `APP_VERSION` 重发，最新 Version ID `d58d696d-9175-4e56-a3d1-52a7d36039af`，Cloudflare API 已确认 100% deployment。当前仅剩受当前网络 1010/直连超时影响的远程 HTTP smoke；收口后即可切入 Phase 2。 |
+| **Session Summary** | 2026-09-05：按 owner 决策将 Cloudflare Worker 的生产对象存储从 R2 改为 Supabase Storage；业务代码统一经 storage adapter，浏览器继续单对象直传，本地测试保留 R2 binding。一个仅允许 Preview/Production 域名的 Managed Turnstile widget 已创建，验证密钥已写入 Preview Worker Secret；真实 Preview/Production Supabase E2E 仍待 Supabase server secret 与 OpenAI 凭证。 |
 
 ## 1. 交接结论
 
@@ -1076,6 +1078,9 @@ CI=1 node scripts/quality-gate.mjs all --require-feature-tests
 
 CI=1 TZ=UTC node scripts/quality-gate.mjs all --require-feature-tests
 => 全部门禁通过
+
+git diff --check
+=> PASS
 ```
 
 两轮完整门禁中的关键测试继续为：
@@ -1497,7 +1502,7 @@ annotations: []
 
 所有 setup、逐包依赖安装、常规门禁、UTC 门禁和 diff check 均通过。Release workflow 没有被执行，因为 production variable 仍不存在；Docker action 的实际 push 与 Vercel CLI 部署仍需未来受控 Release 验证。
 
-### 15.16 2026-09-04 Sites + Railway Demo/Mock 部署与 PR #2 源码同步 checkpoint（当前最新）
+### 15.16 2026-09-04 Sites + Railway Demo/Mock 部署与 PR #2 源码同步 checkpoint（历史 checkpoint）
 
 本节 supersede 前文所有关于“PR #1 尚未合并、Railway 尚未部署、Sites/域名未上线、`active_redeploying`、公网 404、`3a912b7` 尚未合入 `main` 或等待 owner 决定同步路径”的当前状态描述。前文保留为按时间记录的历史证据；恢复任务时优先读取第 0 节、本节和 `docs/DEPLOYMENT.md` 的当前状态章节。
 
@@ -1527,3 +1532,87 @@ annotations: []
 历史部署验收已通过主质量门禁 `165/165`、UTC 时区质量门禁 `165/165`、约 163 项项目测试、Sites Worker `6/6`、前端生产构建、`git diff --check`、Railway API 全链路（匿名会话、分析任务、WAV 上传、报告获取、删除测试数据）以及真实 Chrome 主链路。本次 PR #2 重新通过常规与 UTC 完整质量门禁、前端生产构建、`git diff --check`，并将 Sites Worker 覆盖提升至 `8/8`。当前仍为 Demo/Mock 部署；PR #2 合并后，`main` 将包含 `3a912b7` 部署变更与 `deeeca3` 文档回写。下一阶段另行准备 OpenAI、支付、邮件、Google OAuth、生产数据库/对象存储、备份和可观测性。
 
 现有 `.github/workflows/release.yml` 仍包含 Vercel production release 流程；它是遗留/备用路径，不代表当前 Sites 主站的发布路径。未经 owner 明确决策，不修改、启用或替换该 Vercel 流程。
+
+### 15.17 2026-09-05 Supabase Storage pivot 与双轮验收 checkpoint（当前最新）
+
+owner 决定用 Supabase Storage 替换 Cloudflare R2。当前实现保持 Cloudflare Worker、D1、Queue、Workflow 与 Cron 不变，生产/Preview 对象存储改为 Supabase private bucket；本地 Miniflare 仍使用 R2 binding 作为不访问外部服务的测试后端。
+
+本轮新增 provider-neutral `apps/cloudflare-worker/src/storage/`：统一生成服务端对象 key、校验上传声明与所有权；Supabase adapter 使用 Worker server secret 创建单对象 signed upload URL，浏览器仍直接 PUT，不让完整音频经过生产 HTTP Worker。完成确认通过 Storage `info` 核对大小/MIME/SHA-256 user metadata，并只 Range 读取前 4 字节校验 WebM EBML 魔数；Workflow 才读取完整对象用于 STT。取消、失败、完成、账户删除和每日 Cron 清理均经统一 Storage adapter 删除对象。
+
+Preview/Production 的 `wrangler.jsonc` 已移除 R2 binding，并显式使用 `STORAGE_PROVIDER=supabase`。bucket 名分别为 `speechoptimizer-preview-audio` 与 `speechoptimizer-production-audio`；`STORAGE_LIMIT_BYTES` 默认 800 MiB，为 Supabase Free 约 1 GB Storage 留运维余量。新 server key 优先使用 `SUPABASE_SECRET_KEY`，兼容期也接受 `SUPABASE_SERVICE_ROLE_KEY`；secret 不进入浏览器、仓库、`VITE_*` 或日志。
+
+验证证据：
+
+```text
+pnpm --dir apps/cloudflare-worker run check
+=> PASS
+
+pnpm --dir apps/cloudflare-worker run test
+=> 历史记录为 15/15；当前测试文件已扩展为 30 项，不能再将 15/15 作为现状
+
+pnpm --dir apps/cloudflare-worker run dry-run
+=> PASS；Preview bindings 包含 Workflow / Queue / D1 / Assets / Supabase Storage vars，未包含 R2 binding
+
+CI=1 node scripts/quality-gate.mjs all --require-feature-tests
+=> 全部门禁通过
+
+CI=1 TZ=UTC node scripts/quality-gate.mjs all --require-feature-tests
+=> 全部门禁通过
+```
+
+Storage 定向测试覆盖：signed upload URL、server secret 不泄露、新/旧 Supabase server key header 行为、对象 info + 精确 4 字节 Range、私有对象读取/删除/递归枚举、150 条账户分析分页删除、生命周期清理、60 秒匿名/5 分钟账户可信时长、80/90/95 免费层护栏，以及重复 `audio-complete` 元数据不一致冲突。
+
+当前不能声称真实 Supabase Preview/Production E2E 已通过。Supabase project、两个 private bucket、`SUPABASE_URL`、Preview `TURNSTILE_SECRET_KEY` 与 Preview/Production `TURNSTILE_SITE_KEY` 已完成；当前 Supabase Storage 外部 Gate 只剩 Worker server secret。之后还需配置 `OPENAI_API_KEY` 并应用远端 D1 `0003`，再执行真实直传、Workflow STT、删除和 Cron 清理 E2E。原 Cloudflare R2 `10042` 账号启用问题不再阻塞当前架构。
+
+本轮未执行 commit/push。根目录 `AGENTS.md` 删除继续保持为 owner 已有的任务外工作区改动，没有恢复、修改、暂存或提交。
+
+### 15.18 2026-09-05 实施侧远程资源与凭证 Gate checkpoint（当前最新）
+
+实施侧已用当前 Cloudflare OAuth、Wrangler 与 Supabase connector 完成资源核对。Supabase project `qnmxxvnypmfzwclyyfhr` 状态为 `ACTIVE_HEALTHY`；两个音频 bucket 均为 private，单对象上限 10 MiB，且仅接受 `audio/webm`。Preview/Production D1 已应用 `0001`、`0002_audio_checksum.sql`，本地 `0003_analysis_pagination_and_retention.sql` 仍待远端应用；四个 Queue 已创建。
+
+远程 Preview 仍未包含本工作树的 Phase 2～4 配置：100% deployment `6ddf58b1-b60c-4277-a78d-a13666275814` 指向 Version `e195ac3e-fe03-414a-b1de-24e981596d2d`，该版本只有 Fetch/Assets/基础 vars。Queue producer/consumer 都为 0，Workflow 列表为空。Production Worker 还不存在。故本轮没有把并发工作树部署为缺失关键服务凭证的部分可用版本，也没有启动 Production。
+
+凭证检查没有输出任何值：工作区没有可用 dotenv 条目，常见本机 Keychain 服务项没有匹配条目，已连接 Supabase connector 没有读取 server/service-role key 的能力。Preview secret 列表仍没有 `SUPABASE_SECRET_KEY`、`SUPABASE_SERVICE_ROLE_KEY` 或 `OPENAI_API_KEY`；后续已完成 Preview `TURNSTILE_SECRET_KEY` 与 Preview/Production `TURNSTILE_SITE_KEY` 配置，见 15.19。connector 可读取的 publishable key 明确不具备 server secret 权限，未被使用。下一 Gate 需要由具备 Supabase Dashboard/API Keys 权限的 owner 将真实 server/service-role key 安全提供给 Worker Secret 管理流程，并补真实 OpenAI 凭证；二者与远端 D1 `0003` 齐全后重新部署 Preview，再由独立测试侧执行 Storage、Workflow/STT、历史/删除、账户删除与 Cron E2E。
+
+### 15.19 2026-09-05 Turnstile 外部前置收口 checkpoint（当前最新）
+
+Cloudflare OAuth 已确认具备 `challenge-widgets.write`。账户原有 Turnstile widget 列表为空；官方 Free 计划允许最多 20 个 widget，因此创建一个 Managed widget 不产生付费资源。widget 仅允许 `speechoptimizer-web-preview.bb382978203.workers.dev` 与 `speak-confidently.top`，没有新增、切换或部署任何域名。
+
+公开 site key 已写入 `wrangler.jsonc` 的 Preview 与 Production 非敏感 vars，供 Worker `/health` 向前端提供渲染配置；验证密钥仅通过 `wrangler secret put TURNSTILE_SECRET_KEY --env preview` 写入 Preview Worker Secret，未写入仓库、文档、日志或 Production。Preview Secret 写入成功，Production Worker 保持未创建且未部署。
+
+复核后，已连接 Supabase connector 仍只提供 publishable key 读取能力，不能合法导出 server/service-role key；publishable key 未被替代使用。工作区 dotenv、常见本机 Keychain 服务项中也没有可用的 `OPENAI_API_KEY`。真实 Preview 剩余外部凭证 blocker 精确为 `SUPABASE_SECRET_KEY`（或兼容 `SUPABASE_SERVICE_ROLE_KEY`）与 `OPENAI_API_KEY`；具备这两项并应用远端 D1 `0003_analysis_pagination_and_retention.sql` 后，才可重新部署 Preview 并由独立测试侧执行完整 E2E。
+
+### 15.20 2026-09-05 Cloudflare 免费层迁移主控交接（当前最新）
+
+本节 supersede 15.17～15.19 对当前待迁移项和本地验收数量的描述。继续任务时同时阅读 `docs/CLOUDFLARE_FREE_TIER_MIGRATION_PLAN.md` 第 17.9 节与 `docs/DEPLOYMENT.md`。
+
+本轮已完成 Worker、前端、DLQ 管理恢复和部署手册的本地实现。新增 D1 migrations `0005_upload_tickets_and_dispatch_recovery.sql`、`0006_dlq_admin_recovery.sql`；Preview `speechoptimizer-preview` 的 `0003`～`0006` 首次 `migrations apply` 因 Cloudflare API timeout，post-list 仍显示四项待应用；主控只放行一次受控重试后四项逐个成功，exit `0`，最终 list 为 `No migrations to apply!`，Wrangler 输出未显示 backup/bookmark。Production `speechoptimizer-production` 仍待 `0003`～`0006`，本次未触碰。Preview 仍缺 `SUPABASE_SECRET_KEY`（或兼容 `SUPABASE_SERVICE_ROLE_KEY`）与 `OPENAI_API_KEY`；当前审查版本的 Worker 尚未部署，四个 Queue/DLQ 已存在但 producer/consumer 为 0，Workflow 尚未部署，Production Worker 尚不存在。
+
+实现侧已完成唯一上传 ticket、真实 bytes 容量预占、`uploaded` outbox 补投、Queue 最终投递失败持久化与 DLQ、管理员失败列表/受控重试，以及 `Supabase Response.body -> multipart ReadableStream -> OpenAI` 的流式 STT。前端已完成三段式直传、同一次音频尝试复用幂等键、Turnstile token 生命周期、匿名 60 秒/账户 5 分钟限制与失败任务管理页。原 513 行 `repository.js` 已拆分为认证、分析、上传/容量和维护仓储，当前所有 Worker JavaScript 文件均不超过 300 行。
+
+交接时的直接验证证据：
+
+```text
+pnpm --dir apps/cloudflare-worker run check
+=> PASS；包含 wrangler types --check
+
+pnpm --dir apps/cloudflare-worker run test
+=> 43/43 PASS
+
+node --test prototype/tests/*.test.mjs
+=> 32/32 PASS
+
+pnpm --dir prototype run build
+=> PASS
+```
+
+下一位主控的第一批动作：
+
+1. 执行 Preview `wrangler deploy --dry-run`、全新临时 D1 顺序应用 `0001`～`0006` 与 `git diff --check`。
+2. 执行 `CI=1 node scripts/quality-gate.mjs all --require-feature-tests` 和 `CI=1 TZ=UTC node scripts/quality-gate.mjs all --require-feature-tests`；只有当前最终工作树两轮均通过后，才更新迁移计划中的最终证据。
+3. 由 owner 安全写入 Preview 缺失的 `SUPABASE_SECRET_KEY`（或兼容 service-role key）与 `OPENAI_API_KEY`；Preview D1 `0003`～`0006` 已完成受控应用，首次 timeout、post-list、重试和最终 `No migrations to apply!` 结果须与部署记录一并保留，且 Wrangler 未显示 backup/bookmark。
+4. 以审查后的固定 commit 重新部署 Preview，验证 bindings、Queue consumer、Workflow、Cron 与 `/health`，再执行 Magic Link、Google OAuth、Supabase signed upload、1/5/10 MiB WebM、流式 STT、DLQ/管理员恢复、历史/删除/账户删除和 Cron E2E。
+5. Preview Gate 全部通过后，为 Production D1 应用仍待的 `0003`～`0006`，再使用独立 Production secrets 部署 Production Worker、绑定正式域名并执行生产 smoke；Production migration 本轮未触碰。
+6. 继续保留两项技术 Gate：`audio-complete` 只核对对象 metadata checksum，尚未服务端重算内容 SHA-256；Cloudflare `FixedLengthStream` 与真实 OpenAI 出站路径及 10 MiB Free CPU 成本尚未在 Preview 实测。
+
+工作树原本已包含多组用户/代理改动。根目录 `AGENTS.md` 删除是 owner 既有任务外变更，不得恢复、暂存或提交。本轮未 commit、未 push。

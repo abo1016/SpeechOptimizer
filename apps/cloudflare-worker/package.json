@@ -5,8 +5,12 @@
   "type": "module",
   "scripts": {
     "build:prototype": "pnpm --dir ../../prototype run build",
-    "check": "tsc --noEmit",
+    "types:generate": "wrangler types --env preview --strict-vars=false worker-configuration.d.ts",
+    "types:check": "wrangler types --env preview --strict-vars=false worker-configuration.d.ts --check",
+    "types:check:production": "wrangler types --env production --strict-vars=false worker-configuration.d.ts --check",
+    "check": "pnpm run types:check && tsc --noEmit",
     "test": "node --test test/*.test.mjs",
+    "migrate:local": "wrangler d1 migrations apply speechoptimizer-local --local --env local",
     "dev": "pnpm run build:prototype && wrangler dev --env local",
     "preview": "pnpm run build:prototype && wrangler dev --env preview --remote",
     "dry-run": "pnpm run build:prototype && wrangler deploy --env preview --dry-run"

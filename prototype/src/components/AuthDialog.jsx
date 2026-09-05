@@ -1,18 +1,24 @@
 import { AudioLines, Mail, UserRound, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { resources } from "../api/resources.js";
+import { useTurnstile } from "../hooks/useTurnstile.js";
 import { logEvent } from "../lib/logEvent.js";
 import { useApp } from "../state/AppProvider.jsx";
 
 /** 登录弹窗调用真实认证端点，并将服务端失败信息以可读状态反馈给键盘与读屏用户。 */
 export function AuthDialog({ open, onClose }) {
-  const { authMode, refreshSession } = useApp();
+  const { authMode, turnstileSiteKey, refreshSession } = useApp();
   const closeRef = useRef(null);
   const [email, setEmail] = useState("");
   const [previewToken, setPreviewToken] = useState("");
   const [pending, setPending] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const { containerRef: turnstileRef, token: turnstileToken, reset: resetTurnstile } = useTurnstile({
+    enabled: open && authMode !== "mock",
+    siteKey: turnstileSiteKey,
+    onConfigurationError: setError,
+  });
 
   useEffect(() => {
     if (!open) return undefined;
@@ -27,10 +33,10 @@ export function AuthDialog({ open, onClose }) {
   const requestLink = (event) => {
     event.preventDefault();
     return run("magic-link", async () => {
-      const result = await resources.requestMagicLink(email, authRedirectUri());
+      const result = await resources.requestMagicLink(email, authRedirectUri(), turnstileToken);
       setPreviewToken(result.previewToken ?? "");
       setNotice(result.previewToken ? "A local preview link is ready below." : "Check your email for the sign-in link.");
-    });
+    }, true);
   };
 
   const consumePreview = () => run("magic-preview", async () => {
@@ -41,7 +47,7 @@ export function AuthDialog({ open, onClose }) {
   });
 
   const startGoogle = () => run("google", async () => {
-    const result = await resources.startGoogle(authRedirectUri());
+    const result = await resources.startGoogle(authRedirectUri(), turnstileToken);
     if (authMode === "mock") {
       await resources.completeGoogle(result.state, "valid-local-code");
       await refreshSession();
@@ -50,9 +56,9 @@ export function AuthDialog({ open, onClose }) {
       return;
     }
     window.location.assign(result.authorizationUrl);
-  });
+  }, true);
 
-  async function run(action, operation) {
+  async function run(action, operation, consumesTurnstile = false) {
     setPending(action);
     setError("");
     setNotice("");
@@ -63,6 +69,8 @@ export function AuthDialog({ open, onClose }) {
       setError(requestError.message || "Sign-in could not be completed. Try again.");
       logEvent("auth.action_failed", { action, code: requestError.code ?? "UNKNOWN" });
     } finally {
+      // Turnstile token 只能验证一次；认证请求无论成功或失败都刷新控件，避免再次提交已消费 token。
+      if (consumesTurnstile) resetTurnstile();
       setPending("");
     }
   }
@@ -75,16 +83,17 @@ export function AuthDialog({ open, onClose }) {
         <p className="eyebrow">Save your progress</p>
         <h2 id="auth-title">Keep every take in one place</h2>
         <p id="auth-description">Sign in to retain reports, compare recordings, and manage minutes.</p>
-        <button className="button button-dark auth-action" disabled={Boolean(pending)} onClick={startGoogle}>
+        <button className="button button-dark auth-action" disabled={Boolean(pending) || (authMode !== "mock" && !turnstileToken)} onClick={startGoogle}>
           <UserRound size={18} />{authMode === "mock" ? "Continue with local Google" : "Continue with Google"}
         </button>
         <form className="auth-email-form" onSubmit={requestLink}>
           <label className="field-label" htmlFor="magic-email">Email address</label>
           <input id="magic-email" className="text-input" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" />
-          <button className="button button-secondary auth-action" type="submit" disabled={!email || Boolean(pending)}>
+          <button className="button button-secondary auth-action" type="submit" disabled={!email || Boolean(pending) || (authMode !== "mock" && !turnstileToken)}>
             <Mail size={18} />Email me a magic link
           </button>
         </form>
+        {authMode !== "mock" && <div ref={turnstileRef} aria-label="Human verification" />}
         {previewToken && <button className="text-button auth-preview" disabled={Boolean(pending)} onClick={consumePreview}>Use local preview link</button>}
         {notice && <p className="dialog-message" role="status">{notice}</p>}
         {error && <p className="form-error" role="alert">{error}</p>}
