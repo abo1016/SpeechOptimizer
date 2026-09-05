@@ -29,7 +29,7 @@ export class MvpApplication {
     this.entitlements = new EntitlementService({ store, id: createIdFactory("ent"), logger });
     this.auth = new AuthService({ store, id: createIdFactory("auth"), logger,
       mailer: providers.mailer, oauthProvider: providers.oauthProvider,
-      exposeDevTokens: providers.mode === "mock", allowedRedirectOrigins: config.allowedOrigins });
+      exposeDevTokens: providers.authMode === "mock", allowedRedirectOrigins: config.allowedOrigins });
     // 计费领域的资金写请求必须先 await 这一持久化回调，再触发 Provider 写入。
     this.billing = new BillingService({ store, entitlements: this.entitlements,
       gateway: providers.waffoGateway, persist: () => store.flush(), id: createIdFactory("bill"), logger });

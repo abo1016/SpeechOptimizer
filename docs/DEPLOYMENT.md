@@ -1,6 +1,6 @@
 # SpeechOptimizer MVP 上线与部署准备
 
-> 当前状态（2026-09-04）：Sites 前端、同源 `/api/*` 与 `/health` 代理、Railway `speechoptimizer-api` 和 `/var/lib/speechoptimizer` 持久卷已完成可浏览器验收的 Demo/Mock 部署。Sites 主站为 owner-only；自定义域名 `app.bo-pop.top` 的 `status`、`provider_status`、`ssl_status` 均为 `active`，匿名公网访问返回 HTTP 401 登录门槛。Railway `/health` 返回 HTTP 200，模式为 `mock`。PR #1 已于 2026-09-04 以合并提交 `1c38e65` 合并；[PR #2](https://github.com/abo1016/SpeechOptimizer/pull/2) 是将部署修复提交 `3a912b7` 与交接文档提交 `deeeca3` 同步到 `main` 的既定路径，合并后 `main` 将包含这些部署与文档提交。完整生产模式仍需真实模型、支付、邮件、OAuth、数据库/对象存储和可观测性等外部依赖。远程初始化记录详见第 11 节，当前线上事实详见第 12 节。
+> 当前状态（2026-09-05）：正式域名改为已购买并完成 Cloudflare 委派的 `speak-confidently.top`。OpenAI Sites 已绑定该域名，SSL 已激活且路由正在重新部署；Resend 已创建同名发件域名并正在验证 DKIM/SPF。Google OAuth 与 Railway 的 Origin、回调和发件地址均已切换到 `.top`，Railway 仍使用 `skipDeploys=true` 保持现有 Mock 运行态，待平台验证和本地质量门禁完成后统一部署。
 
 ## 1. 当前与推荐部署拓扑
 
@@ -44,6 +44,16 @@ https://app.bo-pop.top/                    -> OpenAI Sites 自定义域名（own
 https://speechoptimizer-api-production.up.railway.app/health -> Railway API 健康检查
 Sites 同源 /api/*、/health                  -> Railway API（平台侧 API_ORIGIN）
 ```
+
+目标正式入口：
+
+```text
+https://speak-confidently.top/              -> OpenAI Sites 正式主站
+https://speak-confidently.top/auth/callback -> Google OAuth 与 Magic Link 共用回跳页
+https://speak-confidently.top/api/*         -> Sites 同源代理到 Railway API
+```
+
+生产域名切换时必须同步更新：Sites custom domain、DNS/验证记录、Railway `ALLOWED_ORIGINS`、Google OAuth authorized domain/redirect URI、Resend DKIM/SPF/DMARC、`MAGIC_LINK_FROM`、Waffo notify/redirect/goods URL，以及前端公开联系邮箱。内部 package 名、测试域名和 localhost 开发契约不随品牌域名迁移。
 
 `api.bo-pop.top` 不是当前验收必需入口；如后续需要独立 API 域名，必须以平台实际 target 为准重新设计 DNS、CORS 和 Webhook 配置。
 
@@ -191,14 +201,14 @@ OPENAI_FEEDBACK_MODEL
 ### Auth / 邮件
 
 ```text
-GOOGLE_AUTHORIZE_URL
-GOOGLE_TOKEN_URL
+AUTH_MODE=production
 GOOGLE_CLIENT_ID
 GOOGLE_CLIENT_SECRET
+RESEND_API_KEY
 MAGIC_LINK_FROM
 ```
 
-注意：当前 `smtpFrom` 配置已经存在，但真实 SMTP transport 仍需要完成 provider 接线；不能仅靠设置 `MAGIC_LINK_FROM` 就认为真实邮件已上线。
+`AUTH_MODE=production` 可以在 API 仍为 Mock AI/支付时单独启用真实登录。Google 授权、token 和 userinfo URL 已有官方默认值；如无代理或企业网关需求无需覆盖。Magic Link 通过 Resend HTTP API 投递，`MAGIC_LINK_FROM` 的域名必须先在 Resend 完成验证。真实认证模式还要求显式配置高熵 `COOKIE_SECRET` 与生产 `ALLOWED_ORIGINS`，并自动为账户和匿名 Cookie 添加 `Secure`。
 
 ### Waffo
 

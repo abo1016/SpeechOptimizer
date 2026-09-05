@@ -7,9 +7,9 @@ import { PrivacyContent } from "./secondary/PrivacyContent.jsx";
 
 function ContactContent() {
   const contacts = [
-    { title: "Product feedback", detail: "Share workflow friction or a feature idea.", email: "feedback@speechoptimizer.app", icon: MessageSquareText },
-    { title: "Billing support", detail: "Ask about plans, minutes, charges, or refunds.", email: "billing@speechoptimizer.app", icon: CreditCard },
-    { title: "Privacy requests", detail: "Request data access, correction, or deletion.", email: "privacy@speechoptimizer.app", icon: ShieldCheck },
+    { title: "Product feedback", detail: "Share workflow friction or a feature idea.", email: "feedback@speak-confidently.top", icon: MessageSquareText },
+    { title: "Billing support", detail: "Ask about plans, minutes, charges, or refunds.", email: "billing@speak-confidently.top", icon: CreditCard },
+    { title: "Privacy requests", detail: "Request data access, correction, or deletion.", email: "privacy@speak-confidently.top", icon: ShieldCheck },
   ];
 
   return (

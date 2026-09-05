@@ -42,6 +42,40 @@ export class SmtpMagicLinkSender {
   }
 }
 
+/** Resend HTTP sender：只提交登录邮件，不在日志中记录 token、收件地址或响应正文。 */
+export class ResendMagicLinkSender {
+  constructor({ apiKey, from, fetchImpl = fetch, logger = console,
+    clock = () => Date.now(), endpoint = "https://api.resend.com/emails" }) {
+    if (!apiKey) throw new ProviderError("RESEND_NOT_CONFIGURED", "Resend API Key 未配置");
+    if (!from) throw new ProviderError("RESEND_FROM_REQUIRED", "Magic Link 发件地址未配置");
+    this.apiKey = apiKey;
+    this.from = from;
+    this.fetchImpl = fetchImpl;
+    this.logger = logger;
+    this.clock = clock;
+    this.endpoint = endpoint;
+  }
+
+  async sendMagicLink(input) {
+    const message = createMessage(input, this.from, this.clock());
+    let response;
+    try {
+      response = await this.fetchImpl(this.endpoint, {
+        method: "POST",
+        headers: { authorization: `Bearer ${this.apiKey}`, "content-type": "application/json" },
+        body: JSON.stringify({ from: message.from, to: [message.to], subject: message.subject,
+          text: message.text, html: message.html }),
+      });
+    } catch (cause) {
+      throw new ProviderError("RESEND_SEND_FAILED", "Magic Link 邮件发送失败", { retryable: true, cause });
+    }
+    if (!response.ok) throw new ProviderError("RESEND_SEND_FAILED", "Magic Link 邮件发送失败", { retryable: response.status >= 500 });
+    const result = await response.json().catch(() => ({}));
+    this.logger.info?.("[mail] Magic Link 已提交 Resend", { messageId: result.id ?? message.id });
+    return { messageId: result.id ?? message.id };
+  }
+}
+
 function createMessage({ email, token, redirectUri }, from, now) {
   if (!email || !token || !redirectUri) throw new ProviderError("INVALID_MAGIC_LINK_MESSAGE", "Magic Link 邮件参数不完整");
   const url = new URL(redirectUri);

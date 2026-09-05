@@ -21,7 +21,8 @@ export function createMvpServer({ application, config, logger }) {
       assertOrigin(request, config);
       const context = createContext({ request, response, url, application, config, cors, webhookGuard });
       if (request.method === "GET" && url.pathname === "/health") {
-        return sendJson(response, 200, { data: { status: "ok", mode: application.providers.mode } }, cors);
+        return sendJson(response, 200, { data: { status: "ok", mode: application.providers.mode,
+          authMode: application.providers.authMode } }, cors);
       }
       for (const handler of HANDLERS) if (await handler(context)) return;
       sendJson(response, 404, { error: { code: "ROUTE_NOT_FOUND", message: "接口不存在" } }, cors);

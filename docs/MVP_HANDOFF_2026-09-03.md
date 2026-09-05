@@ -1,12 +1,12 @@
 # SpeechOptimizer MVP 当前开发交接
 
 > 交接日期：2026-09-03（Asia/Shanghai）
-> 最近更新：2026-09-04（Asia/Shanghai）。PR #1 已于 2026-09-04 合并，合并提交为 `1c38e65a6c88212225fea4c70587b33a3f9ffb78`；[PR #2](https://github.com/abo1016/SpeechOptimizer/pull/2) 是将线上部署修复提交 `3a912b7` 与交接文档提交 `deeeca3` 同步到 `main` 的既定路径，合并后 `main` 将包含部署与文档提交。Sites 与 Railway 已完成可浏览器验收的 Demo/Mock 部署；生产 Release 仍关闭。
+> 最近更新：2026-09-05（Asia/Shanghai）。正式品牌域名改为已购买的 `speak-confidently.top`；Cloudflare 委派与 Sites/Resend DNS 已配置，Sites SSL 已激活且路由正在重新部署，Resend 正在验证。Google OAuth 与 Railway 已同步新 Origin、回调和发件地址，生产部署仍暂缓到平台验证和本地质量门禁全部完成。
 > 工作区：`/Users/bopop/Documents/SpeechOptimizer`
 > Git 分支：`codex/cicd-bootstrap`
-> 远端同步：当前部署分支已推送到 `origin/codex/cicd-bootstrap`；PR #2 是部署与文档同步到 `main` 的当前路径，合并后以其远端合并提交和 `main` CI 为准。
+> 远端同步：部署与文档已通过 PR #2 合入 `origin/main`；当前认证生产化改动仍只存在于本地 `codex/cicd-bootstrap` 工作树，尚未 commit/push。
 > 最近核验：Sites 部署状态为成功，主站启用 owner-only 登录保护；Railway API `/health` 返回 HTTP 200，模式为 `mock`，数据目录为 `/var/lib/speechoptimizer`。自定义域名 `app.bo-pop.top` 的 Sites `status`、`provider_status`、`ssl_status` 均为 `active`，匿名公网访问返回 HTTP 401 登录门槛，不再是 404。主站、API、持久卷和同源 API 代理均已上线。
-> 当前状态：**SpeechOptimizer 已完成可浏览器验收的 Demo/Mock 部署**，前端、API、Railway 持久卷和同源 `/api/*`、`/health` 代理均已上线；模型、支付、邮件、Google OAuth、生产数据库/对象存储、可观测性等外部依赖仍未接入，不应将当前状态表述为完整生产模式。PR #2 是将 `3a912b7` 的 4 个部署文件变更与 `deeeca3` 的文档回写同步到 `main` 的既定路径；合并后 `main` 将包含二者。根目录 `AGENTS.md` 删除仍是任务外用户改动。
+> 当前状态：**SpeechOptimizer 已完成可浏览器验收的 Demo/Mock 部署**，前端、API、Railway 持久卷和同源 `/api/*`、`/health` 代理均已上线；PR #2 已合入 `main`。认证代码正在升级为可独立启用的真实 Google OAuth + Resend Magic Link；模型、支付、生产数据库/对象存储、可观测性等其余外部依赖仍未接入，不应将当前状态表述为完整生产模式。根目录 `AGENTS.md` 删除仍是任务外用户改动。
 
 ## 0. Canonical Handoff State
 
@@ -15,18 +15,18 @@
 | Field | Current State |
 | --- | --- |
 | **Goal** | 完成 SpeechOptimizer 整个 MVP，并达到当前代码、测试、HTTP、浏览器和上线边界可审计的交付质量；在不伪造外部证据的前提下完成 Waffo 官方 Node SDK 3.0.1 集成，并按第 15.16 节继续上线链。 |
-| **Current Phase** | 可浏览器验收的 Sites + Railway Demo/Mock 部署已完成；PR #2 是将 `3a912b7` 部署变更与 `deeeca3` 文档回写同步到 `main` 的既定路径，合并后 `main` 将包含二者。 |
-| **Current Objective** | 保持当前单实例 Mock 部署可验收；完成 PR #2 的检查与合并后核验 `main`，再按外部依赖准备情况接入真实模型、邮件、OAuth、支付、数据库/对象存储与可观测性。Vercel Release 流程保留为遗留/备用路径，未经 owner 决策不修改。 |
-| **Completed** | Sites 主站、同源 API 代理、Railway `speechoptimizer-api`、500 MB 持久卷和 Mock 全链路已上线；主站 owner-only 登录保护、Railway `/health` HTTP 200、`app.bo-pop.top` 域名状态及匿名 401 门槛均已核验。PR #1 于 2026-09-04 以合并提交 `1c38e65` 合并；部署源码提交 `3a912b7` 与文档提交 `deeeca3` 已推送到 `codex/cicd-bootstrap`。 |
-| **In Progress** | 线上仍为 `mock` 模式，真实模型/支付/邮件/OAuth/生产数据层和监控尚未配置；PR #2 正在完成部署与文档同步。根目录 `AGENTS.md` 删除继续保持未暂存，不得带入部署提交。 |
-| **Next** | 1）完成 PR #2 的检查与合并，并核验 `main` CI；2）保持当前单实例 Railway volume 部署并继续监控 `/health`；3）补齐真实 OpenAI、邮件、Google OAuth、Waffo、数据库/对象存储、备份和监控；4）真实依赖就绪后再做 staging/production E2E；5）如需启用 Vercel Release，先由 owner 明确其作为主路径还是备用路径。 |
-| **Blockers** | **部署运行：无当前阻塞，Mock 全链路已通过。** **完整生产模式：** OpenAI/SMTP/Google/Waffo 凭证与业务决策、生产数据库/对象存储、备份和监控仍不完整。**源码同步：** PR #2 是既定同步路径，合并后 `main` 将包含 `3a912b7` 与 `deeeca3`。 |
+| **Current Phase** | 可浏览器验收的 Sites + Railway Demo/Mock 部署已完成，PR #2 已合入 `main`；当前阶段为“先独立生产化真实登录，其余 AI/支付继续 Mock”。 |
+| **Current Objective** | 在保持 AI/支付仍为 Mock 的前提下，先把应用认证独立生产化：真实 Google OAuth + Resend Magic Link + Secure Cookie；凭证就绪后再部署并做真实登录 E2E。其余真实模型、支付、数据库/对象存储与可观测性继续按外部依赖准备情况推进。 |
+| **Completed** | Sites 主站、同源 API 代理、Railway `speechoptimizer-api`、500 MB 持久卷和 Mock 全链路已上线；主站 owner-only 登录保护、Railway `/health` HTTP 200、`app.bo-pop.top` 域名状态及匿名 401 门槛均已核验。PR #2 已合入 `main`，远端合并提交 `92ea861`。 |
+| **In Progress** | `speak-confidently.top` 的 Cloudflare zone 已 active；Sites 两个 apex A 与验证 TXT、Resend DKIM/SPF/MX/DMARC 已写入并可从公网解析。Sites SSL 已 active、路由正在重新部署；Resend 正在验证。Google OAuth origin/redirect 已切换到 `.top`；Railway 已更新 `ALLOWED_ORIGINS` 与 `MAGIC_LINK_FROM`，继续使用 `skipDeploys=true` 等待统一发布。 |
+| **Next** | 1）等待 Sites 与 Resend 均变为 active/verified；2）完成域名迁移代码、文档、构建与测试；3）形成 Git checkpoint 并部署 Sites/Railway；4）核验 `/health.authMode=production` 与新域名 CORS；5）完成 Google/Magic Link/退出真实浏览器 E2E；6）认证 E2E 通过后再调整 Sites access control。 |
+| **Blockers** | **平台传播：** Sites 路由和 Resend 域名仍在异步验证。**部署：** 真实认证源码仍是本地未提交改动，Railway 变量写入刻意跳过 redeploy；验证完成前不能把当前 `/health mode=mock` 当作真实认证上线。**公开用户访问：** Sites 当前仍是 owner-only，真实认证 E2E 完成后还需单独调整 access control。 |
 | **Architecture Decisions** | 既有域名/Supabase/单实例持久卷决定保持。Release 新增：workflow_run 必须验证 CI success + push + main，并 checkout 对应 immutable SHA；人工发布仅 main；生产开关默认关闭；GHCR 和 Vercel 独立 job 共享同一 verify gate；Vercel 使用固定 59.11.2 + prebuilt production deploy；checkout 不持久化凭证。 |
 | **Failed Attempts** | 既有历史与 Luna 通道失败见 15.13。Actions run `33868265419` 使用 `pnpm/action-setup@v6` 后在 Setup pnpm 卡住超过两分钟；官方 release 已声明该 action 由 `pnpm/setup` 继任，因此主动取消该 run，不再重试旧 action。切换 `pnpm/setup@v2` 后恢复正常。 |
-| **Verification** | **本次 PR #2 本地：** 常规与 UTC 完整质量门禁、原型生产构建、`git diff --check` 通过；Sites Worker `8/8`。**历史部署核验：** 常规与 UTC 完整质量门禁各 `165/165`、原型测试 `21/21`、Sites Worker `6/6`，以及 Railway 创建匿名会话、分析任务、WAV 上传、报告获取和删除链路均通过；真实 Chrome 已验证上传合成 WAV、分析、报告跳转及指标展示；最终 `/health` HTTP 200。历史 GitHub CI run `33868583632` SUCCESS 且 annotations `[]`，不替代当前线上验收。 |
-| **Git State** | Branch `codex/cicd-bootstrap`；部署源码提交 `3a912b7` 与文档提交 `deeeca3` 已推送；PR #1 已于 2026-09-04 合并，merge commit `1c38e65a6c88212225fea4c70587b33a3f9ffb78`。PR #2 是将部署与文档同步到 `main` 的既定路径，合并后以 `main` CI 核验；任务外 `AGENTS.md` 删除仍未暂存、未进入任何 commit。 |
+| **Verification** | **认证生产化本地：** `provider-adapters` 39/39；`mvp-server` 37/37 + check/build；prototype 26/26 + production build + Sites Worker 8/8；`git diff --check` 通过。**外部配置：** Google OAuth Client 与 Resend API Key 已创建，Railway 已确认 6 个认证/域名变量均存在且新 Origin 已加入；变量写入使用 `skipDeploys=true`。写入后线上 `/health` 仍返回 HTTP 200、`mode=mock`，证明没有意外切换当前运行态。真实 Google/Resend 浏览器 E2E 仍等待域名注册/DNS/Resend 验证与认证源码部署。 |
+| **Git State** | 当前工作树仍在 `codex/cicd-bootstrap`；`origin/main` 已包含 PR #2，当前 tip 为 `92ea861`，相对本地分支仅多远端合并历史。认证生产化改动尚未 commit/push；任务外 `AGENTS.md` 删除仍未暂存、不得带入认证提交。 |
 | **Important Files** | `AGENTS.md`（tracked 但当前工作树已删除，需 owner 确认意图）；`docs/MVP_HANDOFF_2026-09-03.md`（恢复入口：第 0 节 + 15.16）；`docs/DEPLOYMENT.md`；`apps/mvp-server/Dockerfile`、`prototype/.openai/hosting.json`、`prototype/worker/index.js`、`prototype/tests/sites-worker.test.mjs`（线上部署变更）；以及 `.github/workflows/{ci.yml,release.yml}`、`.waffo/integration-manifest.json` 与 MVP/Waffo 关键源码。 |
-| **Session Summary** | 2026-09-04：完成 Sites + Railway Demo/Mock 部署、持久卷、同源代理、域名和浏览器端验收；PR #1 已合并，部署源码提交 `3a912b7` 与文档提交 `deeeca3` 已推送到 `codex/cicd-bootstrap`；PR #2 是同步到 `main` 的既定路径。 |
+| **Session Summary** | 2026-09-05：确认实际购买域名为 `speak-confidently.top`，已完成 Cloudflare、Sites、Resend、Google OAuth 与 Railway 的域名配置迁移；当前等待平台验证、代码门禁与统一生产部署。 |
 
 ## 1. 交接结论
 

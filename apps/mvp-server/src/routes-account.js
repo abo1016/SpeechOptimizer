@@ -38,7 +38,7 @@ async function deleteAccount(context) {
   revokeUserSessions(context.application.store, identity.user.id);
   context.application.purgeAccountData(identity.user.id);
   await context.application.store.flush();
-  return context.success(200, core, { "set-cookie": clearCookie("so_session", context.config.mode === "production") });
+  return context.success(200, core, { "set-cookie": clearCookie("so_session", context.config.secureCookies) });
 }
 
 async function adminMutation(context, userId, action, input) {

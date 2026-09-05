@@ -1,37 +1,30 @@
 import { CheckCircle2, RotateCcw } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { resources } from "../api/resources.js";
+import { completeAuthCallback } from "../lib/authCallback.js";
 import { logEvent } from "../lib/logEvent.js";
 import { useApp } from "../state/AppProvider.jsx";
 
-/** OAuth 回跳页仅消费 URL 中的临时 code，成功后立即回到工具首页。 */
+/** 登录回跳页统一消费 Magic Link token 或 Google OAuth code，成功后立即回到工具首页。 */
 export function AuthCallbackPage({ navigate }) {
   const { refreshSession } = useApp();
-  const params = useMemo(() => new URLSearchParams(window.location.search), []);
   const [status, setStatus] = useState("loading");
   const [error, setError] = useState("");
-  const state = params.get("state");
-  const code = params.get("code");
 
   const complete = useCallback(async () => {
-    if (!state || !code) {
-      setStatus("error");
-      setError("The sign-in response is incomplete. Return to the home page and try again.");
-      return;
-    }
     setStatus("loading");
     setError("");
     try {
-      await resources.completeGoogle(state, code);
+      const result = await completeAuthCallback(window.location.search, resources);
       await refreshSession();
-      logEvent("auth.google_completed");
+      logEvent("auth.callback_completed", { provider: result.provider });
       navigate("/");
     } catch (requestError) {
       setStatus("error");
-      setError(requestError.message);
-      logEvent("auth.google_completion_failed", { code: requestError.code ?? "UNKNOWN" });
+      setError(requestError.message || "Sign-in could not be completed. Try again.");
+      logEvent("auth.callback_failed", { code: requestError.code ?? "UNKNOWN" });
     }
-  }, [code, navigate, refreshSession, state]);
+  }, [navigate, refreshSession]);
 
   useEffect(() => { complete(); }, [complete]);
 
@@ -40,7 +33,7 @@ export function AuthCallbackPage({ navigate }) {
       <CheckCircle2 size={34} aria-hidden="true" />
       <p className="eyebrow">Sign in</p>
       <h1>{status === "loading" ? "Finishing your sign in" : "We could not finish signing you in"}</h1>
-      <p className="page-lede" role={status === "error" ? "alert" : undefined}>{status === "loading" ? "Confirming your account with the configured provider." : error}</p>
+      <p className="page-lede" role={status === "error" ? "alert" : undefined}>{status === "loading" ? "Confirming your one-time sign-in response." : error}</p>
       {status === "error" && <div className="processing-actions"><button className="button button-primary" onClick={complete}><RotateCcw size={17} />Try again</button><button className="button button-secondary" onClick={() => navigate("/")}>Return home</button></div>}
     </section>
   );

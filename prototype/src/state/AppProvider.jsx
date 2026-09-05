@@ -8,6 +8,7 @@ const AppContext = createContext(null);
 export function AppProvider({ children }) {
   const [session, setSession] = useState(null);
   const [providerMode, setProviderMode] = useState("unknown");
+  const [authMode, setAuthMode] = useState("unknown");
   const [retainAudio, setRetainAudio] = useState(false);
   const [currentAnalysis, setCurrentAnalysis] = useState(null);
   const [report, setReport] = useState(null);
@@ -25,10 +26,12 @@ export function AppProvider({ children }) {
 
   const applyBootstrap = useCallback((value) => {
     setProviderMode(value.health.mode);
+    setAuthMode(value.health.authMode ?? value.health.mode);
     setSession(value.session);
     setRetainAudio(value.privacy.retainAudio === true);
     logEvent("app.bootstrap_ready", {
       providerMode: value.health.mode,
+      authMode: value.health.authMode ?? value.health.mode,
       identityType: value.session.identity.type,
     });
     return value;
@@ -81,9 +84,9 @@ export function AppProvider({ children }) {
   }, [refreshSession]);
 
   const value = useMemo(() => ({
-    session, providerMode, retainAudio, currentAnalysis, report, bootError, booting,
+    session, providerMode, authMode, retainAudio, currentAnalysis, report, bootError, booting,
     setCurrentAnalysis, setReport, refreshSession, retryBootstrap, updatePrivacy, logout,
-  }), [session, providerMode, retainAudio, currentAnalysis, report, bootError, booting, refreshSession, retryBootstrap, updatePrivacy, logout]);
+  }), [session, providerMode, authMode, retainAudio, currentAnalysis, report, bootError, booting, refreshSession, retryBootstrap, updatePrivacy, logout]);
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
 

@@ -26,9 +26,9 @@ export async function handleAuth(context) {
       clearSession = true;
     }
     if (existing) return success(200, { identity: existing.actor });
-    const created = createAnonymousCookie(config.cookieSecret, config.mode === "production");
+    const created = createAnonymousCookie(config.cookieSecret, config.secureCookies);
     const headers = clearSession
-      ? { "set-cookie": [clearCookie("so_session", config.mode === "production"), created.header] }
+      ? { "set-cookie": [clearCookie("so_session", config.secureCookies), created.header] }
       : { "set-cookie": created.header };
     return success(201, { identity: { type: "anonymous", id: created.id } }, headers);
   }
@@ -59,12 +59,12 @@ async function login(session, context) {
   application.entitlements.grant({ userId: session.user.id, amount: 5,
     source: "free", sourceId: `mvp-initial-free:${session.user.id}` });
   await application.store.flush();
-  return success(200, { user: session.user }, { "set-cookie": sessionCookie(session.token, config.mode === "production") });
+  return success(200, { user: session.user }, { "set-cookie": sessionCookie(session.token, config.secureCookies) });
 }
 
 async function logout(context) {
   const identity = resolveIdentity(context.request, context.application, context.config);
   if (identity.sessionToken) context.application.auth.revokeSession(identity.sessionToken);
   await context.application.store.flush();
-  return context.success(200, { revoked: true }, { "set-cookie": clearCookie("so_session", context.config.mode === "production") });
+  return context.success(200, { revoked: true }, { "set-cookie": clearCookie("so_session", context.config.secureCookies) });
 }

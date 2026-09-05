@@ -2,22 +2,25 @@ import { Environment, RsaUtils, Waffo, WaffoUnknownStatusError } from "@waffo/wa
 import { createFixtureSttProvider } from "../../../packages/speech-engine/src/index.js";
 import { MockGoogleProvider, MockWaffoGateway } from "../../../services/account-billing/fixtures/local-adapters.js";
 import { createFetchTransport, createOpenAiFeedbackProvider, createOpenAiSttProvider,
-  createWaffoGateway, LocalCaptureMagicLinkSender, SmtpMagicLinkSender }
+  createWaffoGateway, LocalCaptureMagicLinkSender, ResendMagicLinkSender }
   from "../../../packages/provider-adapters/src/index.js";
 
 const FIXTURE_WORDS = ["Today", "I", "want", "to", "share", "one", "clear", "idea", "for", "your", "next", "recording"];
 
 /** 组装外接服务边界；开发替身和生产网络适配器在类型与日志上明确区分。 */
 export function createProviders(config, logger, fetchImpl = fetch, external = {}) {
-  if (config.mode !== "production") return createDevelopmentProviders(logger, external);
-  if (!external.smtpTransport) throw new Error("生产模式必须注入 SMTP transport");
+  const base = config.mode === "production"
+    ? createProductionProviders(config, logger, fetchImpl, external)
+    : createDevelopmentProviders(logger, external);
+  return { ...base, ...createAuthProviders(config, logger, fetchImpl), authMode: config.authMode };
+}
+
+function createProductionProviders(config, logger, fetchImpl, external) {
   const waffoClient = createWaffoClient(config, logger, external.waffoClient, external.waffoHttpTransport);
   const isUnknownStatusError = external.isUnknownStatusError ?? defaultIsUnknownStatusError;
   const transport = createFetchTransport(fetchImpl);
   return {
     mode: "production",
-    mailer: new SmtpMagicLinkSender({ transport: external.smtpTransport, from: config.smtpFrom, logger }),
-    oauthProvider: createGoogleProvider(config, fetchImpl),
     sttProvider: createOpenAiSttProvider({ apiKey: config.openAiApiKey,
       endpoint: config.openAiSttUrl, transport, logger }),
     feedbackProvider: createOpenAiFeedbackProvider({ apiKey: config.openAiApiKey,
@@ -49,13 +52,22 @@ function createDevelopmentProviders(logger, external) {
   const isUnknownStatusError = external.isUnknownStatusError ?? defaultIsUnknownStatusError;
   return {
     mode: "mock",
-    mailer: new LocalCaptureMagicLinkSender({ logger }),
-    oauthProvider: new MockGoogleProvider(),
     sttProvider: createFixtureSttProvider(createTranscript()),
     waffoClient: localWaffo.client,
     waffoWebhookSigner: localWaffo.signWebhook,
     isUnknownStatusError,
     waffoGateway: external.waffoGateway ?? new MockWaffoGateway(),
+  };
+}
+
+/** 认证可独立于 AI/支付切换到真实 Provider，支持当前 Demo/Mock 部署逐项生产化。 */
+function createAuthProviders(config, logger, fetchImpl) {
+  if (config.authMode !== "production") {
+    return { mailer: new LocalCaptureMagicLinkSender({ logger }), oauthProvider: new MockGoogleProvider() };
+  }
+  return {
+    mailer: new ResendMagicLinkSender({ apiKey: config.resendApiKey, from: config.smtpFrom, fetchImpl, logger }),
+    oauthProvider: createGoogleProvider(config, fetchImpl),
   };
 }
 
@@ -125,10 +137,25 @@ function createGoogleProvider(config, fetchImpl) {
       return `${config.googleAuthorizeUrl}?${query}`;
     },
     async exchangeCode({ code, redirectUri }) {
-      const response = await fetchImpl(config.googleTokenUrl, { method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ code, redirectUri, clientId: config.googleClientId, clientSecret: config.googleClientSecret }) });
-      if (!response.ok) throw Object.assign(new Error("Google OAuth 交换失败"), { code: "OAUTH_EXCHANGE_FAILED" });
-      return response.json();
+      const tokenBody = new URLSearchParams({ code, redirect_uri: redirectUri,
+        client_id: config.googleClientId, client_secret: config.googleClientSecret,
+        grant_type: "authorization_code" });
+      const tokenResponse = await fetchImpl(config.googleTokenUrl, { method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" }, body: tokenBody });
+      if (!tokenResponse.ok) throw oauthError("OAUTH_EXCHANGE_FAILED", "Google OAuth 交换失败");
+      const token = await tokenResponse.json();
+      if (!token?.access_token) throw oauthError("OAUTH_TOKEN_INVALID", "Google OAuth 未返回访问令牌");
+
+      const profileResponse = await fetchImpl(config.googleUserinfoUrl, {
+        headers: { authorization: `Bearer ${token.access_token}`, accept: "application/json" },
+      });
+      if (!profileResponse.ok) throw oauthError("OAUTH_PROFILE_FAILED", "Google 用户信息读取失败");
+      const profile = await profileResponse.json();
+      return { email: profile.email, emailVerified: profile.email_verified === true, subject: profile.sub };
     },
   };
+}
+
+function oauthError(code, message) {
+  return Object.assign(new Error(message), { code });
 }
