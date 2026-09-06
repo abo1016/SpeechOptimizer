@@ -2,7 +2,7 @@
 
 > 最后更新：2026-09-06（Asia/Shanghai）
 >
-> 当前状态：**Cloudflare 免费层迁移进行中。Preview D1 `0003`～`0006` 已完成受控应用与复核，固定提交 `c8b7078` 已部署到 `speechoptimizer-web-preview`，远端 Queue producer/consumer、Workflow、Cron handler 与 `/health` bindings 均已出现。发布后浏览器 smoke 发现前端 API client 只解包 `{data}`，而公开 `/health` 返回顶层 JSON，导致 bootstrap 读取 `health.mode` 失败；本地兼容修复与回归 Gate 已通过，仍待以新的固定 SHA 重新部署并复核真实 E2E。Production D1 仍待 `0003`～`0006`，Production Worker 不存在，尚未部署或切流。** 本文只描述后续受控发布流程，不把本地测试、`wrangler deploy --dry-run` 或 HTTP smoke 当作 Production 验收。
+> 当前状态：**Cloudflare 免费层迁移进行中。Preview D1 `0003`～`0006` 已完成受控应用与复核；浏览器 smoke 在 `c8b7078` 上发现的 `/health` 解包 blocker 已由固定提交 `90ae1976e4212730ce7895411465cf5d71aab6e7` 修复并重新部署到 `speechoptimizer-web-preview`。远端 Queue producer/consumer、Workflow、Cron handler 与 `/health` bindings 均已复核，浏览器 bootstrap 已恢复并能渲染真实 Managed Turnstile。剩余真实 signed upload、Queue/Workflow/STT、认证、删除/清理与 1/5/10 MiB 性能 E2E 需要通过真人 Turnstile Gate 后继续。Production D1 仍待 `0003`～`0006`，Production Worker 不存在，尚未部署或切流。** 本文只描述后续受控发布流程，不把本地测试、`wrangler deploy --dry-run` 或 HTTP smoke 当作 Production 验收。
 
 ## 1. 范围与当前事实
 
@@ -14,20 +14,20 @@
 | `preview` | `speechoptimizer-web-preview` | `speechoptimizer-preview` | `speechoptimizer-preview-audio` | `speechoptimizer-preview-analysis` |
 | `production` | `speechoptimizer-web` | `speechoptimizer-production` | `speechoptimizer-production-audio` | `speechoptimizer-analysis` |
 
-以下状态来自 [Cloudflare 免费层迁移计划](CLOUDFLARE_FREE_TIER_MIGRATION_PLAN.md) 的 2026-09-05 记录，后续执行必须重新核验，而不能仅依赖本段文字：
+以下状态来自 [Cloudflare 免费层迁移计划](CLOUDFLARE_FREE_TIER_MIGRATION_PLAN.md) 截至 2026-09-06 的最新 checkpoint，后续执行仍必须重新核验，而不能仅依赖本段文字：
 
 - Phase 1 正式 Preview HTTP smoke 已通过：`/` 为 `200`、`/history` 为 `200`、`/health` 返回 JSON `200`、`POST /health` 返回 JSON `405`、未知 API 返回 JSON `404`。这些证据只覆盖静态资源和路由，不证明本轮功能资源已经上线。
 - Preview `speechoptimizer-preview` 的 `0003`～`0006` 首次 `migrations apply` 因 Cloudflare API timeout，post-list 仍显示四项待应用；主控只放行一次受控重试后四项逐个成功，exit `0`，最终 `migrations list` 返回 `No migrations to apply!`。Wrangler 输出未显示 backup/bookmark，不记录或声称存在备份/书签证据。
 - Production `speechoptimizer-production` 仍待应用 `0003_analysis_pagination_and_retention.sql`、`0004_account_deletion_and_storage_reservations.sql`、`0005_upload_tickets_and_dispatch_recovery.sql` 与 `0006_dlq_admin_recovery.sql`；本次未触碰 Production，后续仍须重新列出并应用**所有**未应用 migration。
 - 四个 Preview/Production Queue 与 DLQ 已存在；`c8b7078` 部署后只读复核显示 Preview 主 Queue `speechoptimizer-preview-analysis` 为 `1 producer / 1 consumer`，Preview Workflow `speechoptimizer-preview-analysis` 已绑定到 `speechoptimizer-web-preview`，Production Queue/DLQ 仍为 `0/0`。DLQ 没有 consumer 属于当前设计，不得据此声称完整业务 E2E 已通过。
 - 2026-09-06 已通过 `wrangler secret list --env preview --format json` 只读确认 Preview 的 `SUPABASE_SECRET_KEY` 与 `OPENAI_API_KEY` **名称存在**；该命令不读取、验证、导出或回显值，因此不能证明值可用、是否已轮换或真实 E2E 已通过。Worker 仍应只将它们作为 Secret 使用。AIHubMix 的 `OPENAI_STT_URL`/`OPENAI_STT_MODEL` 已进入审查配置，真实转写兼容性仍须由 E2E 验证。
-- `c8b7078c9e379ea3f1b5dd1068a1d9db3993c23a` 已于 2026-09-06 部署到 Preview，Version ID 为 `7ce40b6f-f8a8-41b8-901a-1f1858f38305`；`/health` 返回该完整 SHA，且报告 assets、D1、Storage、Queue、Workflow bindings 均可用。该版本的浏览器 bootstrap 仍因 `/health` 响应解包契约不一致失败，因此不能作为可验收 Preview 版本。
-- 针对上述浏览器 blocker 的 API client 兼容修复已完成本地定向回归、常规与 `TZ=UTC` 双轮完整质量门禁、Preview dry-run 与 Preview/Production generated-types 检查；修复版本仍须以新的固定 SHA 部署后重新做浏览器、Storage、Queue/Workflow、STT、认证与性能 E2E。两个 Preview Secret 的名称级 Gate 已关闭，但其有效性、轮换状态及 AIHubMix 音频转写兼容性仍须由真实流程证明。Production D1、Production Worker、Production secrets 与公网切流均未触碰。
+- `c8b7078c9e379ea3f1b5dd1068a1d9db3993c23a` 曾部署为 Version `7ce40b6f-f8a8-41b8-901a-1f1858f38305`；发布后浏览器 smoke 发现 API client 只解包 `{data}`、而公开 `/health` 返回顶层 JSON，导致 bootstrap 读取 `health.mode` 失败。该问题已由 `90ae1976e4212730ce7895411465cf5d71aab6e7` 修复并部署为 Version `c876e33d-785a-4680-92b2-58984bf2209b`。
+- 修复版本的 `/health` 返回完整 `90ae197...` SHA，并报告 assets、D1、Storage、Queue、Workflow 均为可用；HTTP smoke 为 `/` `200`、`/history` `200`、`/health` `200`、`POST /health` `405`、未知 `/api/v1/*` `404`。浏览器 bootstrap 不再报 service connection error，Recent sessions 正常结束初始化，真实 Managed Turnstile 已渲染。常规与 `TZ=UTC` 双轮完整质量门禁均通过，显式 TAP 测试为 `229/229`；Preview dry-run、Preview/Production generated-types、`git diff --check` 与 Preview D1 remote list 也通过。两个 Preview Secret 的名称级 Gate 已关闭，但其有效性、轮换状态及 AIHubMix 音频转写兼容性仍须由通过 Turnstile 后的真实流程证明。Production D1、Production Worker、Production secrets 与公网切流均未触碰。
 - Production 的 `wrangler.jsonc` 目标配置已存在，但 Production Worker 不存在；独立 Production secrets、真实 E2E 与公网切流均**未验收**。
 
 旧 OpenAI Sites + Railway Demo/Mock 路径不再是新功能的主发布路径。迁移期间它们只作为回退链保留；不得删除 Railway service、持久卷、Sites 配置或旧数据，也不得把其历史健康检查当作 Cloudflare Production 成功证据。
 
-本次文档更新没有执行 D1、Secret、Worker、DNS、Queue、Workflow 或 Supabase 的任何远端写操作。
+本轮已执行且只执行 Preview Worker 的固定 SHA 部署；没有执行 Production D1、Production Secret、Production Worker、DNS、Queue/Workflow 管理操作或 Supabase 配置写入。
 
 ## 2. 发布不变量
 
@@ -60,7 +60,7 @@ pnpm --dir apps/cloudflare-worker exec wrangler deploy --env preview --dry-run
 
 - Cloudflare Preview Worker 使用 `speechoptimizer-web-preview`，D1 binding 为 `DB`，且对应 Preview D1 而非 Production D1。
 - Preview Supabase bucket 为 private，只允许产品当前支持的 `audio/webm`，单对象最大 10 MiB；不得把 bucket 改为公开，也不得用公开 key 代替 server secret。
-- Wrangler 配置要求 Preview 使用独立的 Queue 和 DLQ：`speechoptimizer-preview-analysis` 与 `speechoptimizer-preview-analysis-dlq`；Workflow 名称为 `speechoptimizer-preview-analysis`；Cron 配置为每日 `17 3 * * *`。现有远端 Queue 的 producer/consumer 均为 `0`，必须在本轮版本部署后重新核验绑定与消费，不得提前标记为已启用。
+- Wrangler 配置要求 Preview 使用独立的 Queue 和 DLQ：`speechoptimizer-preview-analysis` 与 `speechoptimizer-preview-analysis-dlq`；Workflow 名称为 `speechoptimizer-preview-analysis`；Cron 配置为每日 `17 3 * * *`。`90ae197...` 部署后已只读确认 Preview 主 Queue 为 `1 producer / 1 consumer`、Workflow 已绑定；后续每次新版本部署仍必须重新核验这些绑定与消费状态，不能沿用历史结果。
 - `ALLOWED_ORIGINS` 只包含确认的 Preview origin；Google OAuth redirect URI、Resend 发件域和 Turnstile hostname 与实际 Preview URL 完全一致。
 - `SUPABASE_URL`、`SUPABASE_STORAGE_BUCKET`、`TURNSTILE_SITE_KEY`、`OPENAI_STT_URL`、`OPENAI_STT_MODEL`、大小/时长/免费额度参数是非敏感运行时变量；任何修改都应通过审查后的 Wrangler 配置发布，不应临时在 Dashboard 漂移。
 

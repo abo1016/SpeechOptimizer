@@ -1,6 +1,6 @@
 # SpeechOptimizer Cloudflare 全栈免费层改造方案
 
-> 状态：Phase 1 本地与远程 HTTP Gate 已完成；Phase 2～4 的本地实现、高优先级一致性修复、DLQ 管理闭环与 Wrangler generated types Gate 已通过。Preview D1 已完成 `0003`～`0006` 的受控应用与复核，2026-09-06 已名称级确认 Preview `SUPABASE_SECRET_KEY` 与 `OPENAI_API_KEY` 存在（未读取或验证其值）；当前外部 Gate 是部署当前审查版本、验证真实 Supabase/Workflow/AIHubMix 流式 E2E，并完成 Free CPU/完整性 Spike。Production 尚未部署或切流。
+> 状态：Phase 1 本地与远程 HTTP Gate 已完成；Phase 2～4 的本地实现、高优先级一致性修复、DLQ 管理闭环与 Wrangler generated types Gate 已通过。Preview D1 已完成 `0003`～`0006` 的受控应用与复核，Preview `SUPABASE_SECRET_KEY` 与 `OPENAI_API_KEY` 已名称级确认存在。固定提交 `90ae1976e4212730ce7895411465cf5d71aab6e7` 已部署到 Preview，bindings 与浏览器 bootstrap 已复核；当前外部 Gate 收敛为通过真人 Turnstile 后完成真实 Supabase/Workflow/AIHubMix 流式 E2E，以及 Free CPU/完整性 Spike。Production 尚未部署或切流。
 > 编制日期：2026-09-05
 > 目标：在不使用 Railway、Vercel 和 Cloudflare Container 的前提下，将公开站点、真实认证、音频分析与数据持久化迁移到 Cloudflare 免费额度内。第三方 OpenAI、Resend、域名和支付渠道费用不属于 Cloudflare 免费额度。
 
@@ -383,7 +383,7 @@ Cloudflare OAuth 已确认具备 `challenge-widgets.write`，账户原有 Turnst
 
 重新核对后，已连接 Supabase connector 只提供 publishable key 读取能力，没有能合法读取 server/service-role key 的接口；publishable key 未被当作 server secret 使用。工作区 dotenv 和常见本机 Keychain 服务项也未发现可用 `OPENAI_API_KEY`。真实 Preview 的外部凭证 Gate 因此收敛为 Worker `SUPABASE_SECRET_KEY`（或兼容 `SUPABASE_SERVICE_ROLE_KEY`）与 `OPENAI_API_KEY`；两者具备并应用远端全部待迁移项后，才重新部署 Preview，并由独立测试侧执行 Storage、Workflow/STT、删除和 Cron E2E。
 
-### 17.9 2026-09-05 主控验收与未完成任务（当前最新）
+### 17.9 2026-09-05 主控验收与未完成任务（历史 checkpoint）
 
 本轮以子代理分工完成 Worker、前端、部署手册和质量门禁纠偏。Worker 新增 `0005_upload_tickets_and_dispatch_recovery.sql` 与 `0006_dlq_admin_recovery.sql`：同一分析只复用一个 D1 持久化上传 ticket，容量按声明 bytes 原子预占；`uploaded` 作为持久化 outbox，首次 `Queue.send()` 失败可由重复 `audio-complete`、重试或 Cron 补投；Queue 最终 delivery 失败会先把稳定错误码、失败阶段和时间写入 D1，再让引用进入 DLQ。管理员页面只展示失败分析并调用受权限、可重试性、音频存在和 attempt 上限约束的恢复 API，不迁移免费 Beta 已关闭的支付管理面。
 
@@ -417,7 +417,7 @@ Cloudflare OAuth 已确认具备 `challenge-widgets.write`，账户原有 Turnst
 4. Production D1 通过复核后，再准备独立 Production secrets、部署 Production Worker、绑定正式域名并执行生产 smoke。
 5. 生产小流量运行至少 72 小时后，再由 owner 决定是否提高配额或下线旧 Sites/Railway 回退链。
 
-### 17.10 2026-09-05 OpenAI-compatible 中转配置与重新验收（当前最新）
+### 17.10 2026-09-05 OpenAI-compatible 中转配置与重新验收（历史 checkpoint）
 
 Owner 明确真实 STT 使用 OpenAI-compatible 中转，不应把官方 OpenAI endpoint、模型或密钥来源硬编码为部署前提。Worker 已将真实转写依赖冻结为三个逐环境配置项：`OPENAI_STT_URL` 是完整 HTTPS `POST` endpoint，`OPENAI_STT_MODEL` 是 multipart 模型字段，两者属于非敏感 Wrangler `vars`；`OPENAI_API_KEY` 只作为 Worker Secret 并仅进入 Bearer 鉴权。未设置 URL/model 时仍保留官方 endpoint 与 `whisper-1` 默认值，显式配置为空或包含不安全 URL/userinfo/query/fragment、空白、控制字符或超长模型时会在外部 fetch 前以不可重试的 `STT_CONFIG_INVALID` fail closed。客户端不能覆盖 endpoint、模型、鉴权、逐词时间戳或重试策略。
 
@@ -433,3 +433,25 @@ Owner 明确真实 STT 使用 OpenAI-compatible 中转，不应把官方 OpenAI 
 - 常规与 `TZ=UTC` 两轮 `CI=1 node scripts/quality-gate.mjs all --require-feature-tests` 均 exit `0`；每轮 26 个子门禁和当前合计 `228/228` 项测试通过。
 
 浏览器自动化核验曾使旧 Supabase Preview server key 与 AI INPUT key 的完整值进入受限工具输出；迁移记录和代码未保存或回显这些值。2026-09-06 使用 `wrangler secret list --env preview --format json` 做了**名称级**只读复核，已确认 Preview 存在 `SUPABASE_SECRET_KEY` 与 `OPENAI_API_KEY`，但 Wrangler 不能借此确认值有效、轮换状态或 Provider 授权范围，且本轮未读取值。因而“Secret 名称缺失”不再是部署 blocker；真实 Supabase、Queue/Workflow、STT 与 1/5/10 MiB Spike 仍必须在新不可变 commit 部署后完成，AIHubMix 的完整音频转写契约也只能由真实流程验证。Production D1、Production secrets、Production Worker 与 DNS 仍未触碰。
+
+### 17.11 2026-09-06 Preview 部署、浏览器纠偏与当前 Gate（当前最新）
+
+主控复核发现前一交接记录落后于真实远端：`c8b7078c9e379ea3f1b5dd1068a1d9db3993c23a` 已在 2026-09-06 10:51（Asia/Shanghai）部署到 Preview，Version ID `7ce40b6f-f8a8-41b8-901a-1f1858f38305`。该版本已带 Fetch、Queue、scheduled handler、D1、Supabase Storage vars、Queue consumer/producer 与 Workflow；Preview D1 remote list 为 `No migrations to apply!`，主 Queue 为 `1 producer / 1 consumer`，Workflow `speechoptimizer-preview-analysis` 已存在。
+
+发布后浏览器 smoke 找到一个真实 blocker：Worker 的公开 `/health` 有意返回顶层 JSON，而前端通用 API client 对所有成功响应都只返回 `payload.data`，导致 `resources.health()` 变成 `undefined`，随后 bootstrap 在读取 `health.mode` 时失败。修复保持公开 `/health` 契约不变，让 client 对含 `data` 字段的业务响应继续精确解包，对 raw 成功 JSON 原样返回，并增加定向回归。
+
+修复提交 `90ae1976e4212730ce7895411465cf5d71aab6e7` 已于 2026-09-06 13:57（Asia/Shanghai）部署到 `speechoptimizer-web-preview`，Version ID `c876e33d-785a-4680-92b2-58984bf2209b`。发布后证据：
+
+- `/` `200`、`/history` `200`、`/health` `200`、`POST /health` `405`、未知 `/api/v1/*` `404`；`/health.version` 为完整 `90ae197...` SHA，assets/D1/storage/queue/workflow 均为 `true`。
+- `wrangler versions view` 显示 handlers 为 `fetch, queue, scheduled`，Preview Queue、D1、Workflow、Assets 与 Supabase/AIHubMix vars 均绑定；Secret 只复核名称，没有读取值。
+- Preview D1 仍为 `No migrations to apply!`；主 Queue 仍为 `1 producer / 1 consumer`；Workflow 已更新到本次 Preview 部署。
+- 浏览器 reload 后不再出现 `Service connection failed`，Recent sessions 正常结束初始化，真实 Managed Turnstile widget 已渲染，说明 `/health`、匿名会话 bootstrap 与公开 site key 链路已恢复。
+- 修复后常规与 `TZ=UTC` 两轮 `CI=1 node scripts/quality-gate.mjs all --require-feature-tests` 均 exit `0`，每轮显式 TAP 测试为 `229/229`；Preview dry-run、Preview/Production generated types 与 `git diff --check` 均通过。本机未检测到 Docker Compose v2，因此脚本仍明确跳过 `docker compose config`，其余基础设施静态与契约检查通过。
+
+当前剩余 Preview Gate 不再是部署或 Turnstile 配置缺失，而是**真人 Turnstile 验证后的真实业务链**。浏览器自动化不得替用户完成 CAPTCHA，因此本轮在 challenge 出现处停止相关交互，但其他验收继续完成。下一步固定为：
+
+1. 由 owner 在保留的 Preview 浏览器会话中完成一次真人 Turnstile；随后继续匿名分析的 signed upload → Supabase private object → Queue → Workflow → AIHubMix STT → report 全链路。
+2. 用 1/5/10 MiB WebM 样本记录 CPU、内存、Storage/egress、D1 rows、Queue ops 与 Workflow steps，并验证 `FixedLengthStream`、multipart `verbose_json`、逐词 timestamps 与实际字节完整性边界。
+3. 分别完成 Magic Link 与 Google OAuth 的 Turnstile + 回调 + Session E2E；若需要真实邮箱或 Google 测试账户，只记录为统一人工输入，不阻断其他验证。
+4. 完成失败重试、DLQ/管理员恢复、历史、单分析删除、账户删除与 Cron 清理证据。
+5. 只有上述 Preview Gate 全部通过后，才进入 Production D1 `0003`～`0006`、独立 Production secrets、Production Worker、正式域名与生产 smoke。当前 Production 与 DNS 仍未触碰，也未执行 Git push。
