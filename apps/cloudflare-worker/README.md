@@ -10,6 +10,18 @@ SpeechOptimizer 的 Cloudflare 全栈入口。当前已实现 Static Assets、D1
 
 Preview 与 Production 的 D1、Supabase Storage bucket、Queue、Secrets 必须隔离。Preview 使用 `speechoptimizer-preview-audio`，Production 使用 `speechoptimizer-production-audio`；两者都必须是 private bucket。`SUPABASE_SECRET_KEY`（或兼容期的 `SUPABASE_SERVICE_ROLE_KEY`）只允许写入 Worker Secret，绝不能进入浏览器、`VITE_*`、日志或仓库。
 
+## OpenAI-compatible STT 配置
+
+Worker 使用服务端的 OpenAI-compatible 音频转写接口。`OPENAI_API_KEY` 是每个命名环境独立管理的 Worker Secret，只通过 `wrangler secret put OPENAI_API_KEY --env <环境>` 写入；不要把它放进 `wrangler.jsonc` 的 `vars`、浏览器、D1、对象 metadata 或日志。
+
+`OPENAI_STT_URL` 是完整的 `POST` endpoint，不会再自动拼接 `/v1/audio/transcriptions`。未设置时默认使用 `https://api.openai.com/v1/audio/transcriptions`；显式值必须是非空、无首尾或内部空白、长度不超过 2048 的 HTTPS URL，包含 hostname，且不得有 userinfo、query、fragment 或控制字符。这样既能直接调用官方接口，也能切换到路径已确定的 OpenAI-compatible 中转 endpoint；中转 endpoint 必须接受同一 Bearer 鉴权和 multipart 请求契约。
+
+`OPENAI_STT_MODEL` 未设置时默认为 `whisper-1`。它由部署环境控制并写入 multipart 的 `model` 字段；允许经过审查的中转模型别名，但拒绝空白、控制字符和超长值。请求固定携带 `response_format=verbose_json`、`timestamp_granularities[]=word`，因此中转必须返回兼容的 `text`、可信 `duration` 和逐词 `words` 字段。不要把请求体、请求头、endpoint、model 或 Secret 暴露到日志；配置非法会在外部 fetch 前以不可重试的 `STT_CONFIG_INVALID` 失败。
+
+不开放请求体或客户端参数覆盖 endpoint、model、Bearer 鉴权、`response_format`、逐词时间戳、文件名/MIME、`Idempotency-Key`、超时和 Workflow 重试策略；这些属于服务端安全与响应契约，改变它们应先实现并验证独立 provider adapter。
+
+Local、Preview、Production 的 `wrangler.jsonc` 命名环境都会显式声明 URL/model；当前值均为官方兼容默认值。Local 的默认执行链通常由 Mock 后端覆盖，不代表真实 OpenAI Secret 已配置；真实 Preview/Production 流程必须在部署前单独写入对应 Worker Secret。
+
 ## 本地验证
 
 `pnpm run dev` 会先构建 `prototype/dist/client`，再通过 Wrangler 本地运行 Worker。Static Assets 使用 SPA fallback；`/health` 与 `/api/*` 由 Worker 优先处理。

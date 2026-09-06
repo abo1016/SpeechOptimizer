@@ -26,6 +26,110 @@ test("STT 请求传递稳定幂等键并映射可重试 Provider 故障", async 
   assert.ok(calls[0].signal instanceof AbortSignal);
 });
 
+test("STT 默认使用官方 endpoint 与 whisper-1，API key 只进入 Bearer", async () => {
+  const apiKey = "sk-test-default-secret";
+  const calls = [];
+  const result = await requestOpenAiTranscription({ OPENAI_API_KEY: apiKey }, analysis("ana_default", 3),
+    audioStream([new Uint8Array([1, 2, 3])]), async (url, init) => {
+      const body = await readBodyText(init.body);
+      calls.push({ url, init, body });
+      return Response.json({ text: "default" });
+  });
+
+  assert.deepEqual(result, { text: "default" });
+  assert.equal(calls[0].url, "https://api.openai.com/v1/audio/transcriptions");
+  assert.equal(calls[0].init.method, "POST");
+  const headers = new Headers(calls[0].init.headers);
+  assert.equal(headers.get("authorization"), `Bearer ${apiKey}`);
+  assert.match(headers.get("content-type"), /^multipart\/form-data; boundary=/);
+  for (const [name, value] of headers) {
+    if (name !== "authorization") assert.equal(value.includes(apiKey), false, `${name} 不应携带 API key`);
+  }
+  assert.match(calls[0].body, /name="model"\r\n\r\nwhisper-1\r\n/);
+  assert.equal(calls[0].url.includes(apiKey), false);
+  assert.equal(calls[0].body.includes(apiKey), false);
+});
+
+test("STT relay 使用显式完整 endpoint 与 model，并保留 multipart 字段契约", async () => {
+  const apiKey = "sk-test-relay-secret";
+  const relayUrl = "https://stt-relay.example.test/openai/v1/audio/transcriptions";
+  const model = "relay-transcribe-model";
+  const calls = [];
+  await requestOpenAiTranscription({ OPENAI_API_KEY: apiKey, OPENAI_STT_URL: relayUrl, OPENAI_STT_MODEL: model },
+    analysis("ana_relay", 4), audioStream([new Uint8Array([0x1a, 0x45, 0xdf, 0xa3])]), async (url, init) => {
+      calls.push({ url, init, body: await readBodyText(init.body) });
+      return Response.json({ text: "relay" });
+    });
+
+  assert.equal(calls[0].url, relayUrl);
+  assert.equal(calls[0].init.method, "POST");
+  const headers = new Headers(calls[0].init.headers);
+  assert.equal(headers.get("authorization"), `Bearer ${apiKey}`);
+  assert.match(headers.get("content-type"), /^multipart\/form-data; boundary=/);
+  assert.match(calls[0].body, new RegExp(`name="model"\\r\\n\\r\\n${model}\\r\\n`));
+  assert.match(calls[0].body, /name="response_format"\r\n\r\nverbose_json\r\n/);
+  assert.match(calls[0].body, /name="timestamp_granularities\[\]"\r\n\r\nword\r\n/);
+  assert.equal(calls[0].url.includes(apiKey), false);
+  assert.equal(calls[0].body.includes(apiKey), false);
+});
+
+test("STT 非法 endpoint 在 fetch 前失败且不调用外部服务", async () => {
+  const invalidUrls = [
+    "",
+    "   ",
+    "http://stt-relay.example.test/v1/audio/transcriptions",
+    "https://",
+    "https://user:password@stt-relay.example.test/v1/audio/transcriptions",
+    "https://stt-relay.example.test/v1/audio/transcriptions?api_key=secret",
+    "https://stt-relay.example.test/v1/audio/transcriptions#fragment",
+  ];
+  for (const url of invalidUrls) {
+    let fetchCalls = 0;
+    await assert.rejects(() => requestOpenAiTranscription({ OPENAI_API_KEY: "sk-test-secret", OPENAI_STT_URL: url },
+      analysis("ana_invalid_url", 3), audioStream([new Uint8Array([1, 2, 3])]), async () => {
+        fetchCalls += 1;
+        return Response.json({ text: "unexpected" });
+      }), (error) => {
+        assert.equal(error.code, "STT_CONFIG_INVALID");
+        assert.equal(error.retryable, false);
+        return true;
+      });
+    assert.equal(fetchCalls, 0, `非法 URL ${JSON.stringify(url)} 不应触发 fetch`);
+  }
+});
+
+test("STT 非法 model 在 fetch 前失败且不调用外部服务", async () => {
+  const invalidModels = ["", "   ", "relay\nmodel", "relay\u0000model", "m".repeat(10_000)];
+  for (const model of invalidModels) {
+    let fetchCalls = 0;
+    await assert.rejects(() => requestOpenAiTranscription({ OPENAI_API_KEY: "sk-test-secret", OPENAI_STT_MODEL: model },
+      analysis("ana_invalid_model", 3), audioStream([new Uint8Array([1, 2, 3])]), async () => {
+        fetchCalls += 1;
+        return Response.json({ text: "unexpected" });
+      }), (error) => {
+        assert.equal(error.code, "STT_CONFIG_INVALID");
+        assert.equal(error.retryable, false);
+        return true;
+      });
+    assert.equal(fetchCalls, 0, `非法 model ${JSON.stringify(model)} 不应触发 fetch`);
+  }
+});
+
+test("STT 缺少 API key 在 fetch 前失败且不泄露或调用外部服务", async () => {
+  let fetchCalls = 0;
+  await assert.rejects(() => requestOpenAiTranscription({ OPENAI_STT_URL: "https://stt-relay.example.test/v1/audio/transcriptions" },
+    analysis("ana_missing_key", 3), audioStream([new Uint8Array([1, 2, 3])]), async () => {
+      fetchCalls += 1;
+      return Response.json({ text: "unexpected" });
+    }), (error) => {
+      assert.equal(error.code, "STT_NOT_CONFIGURED");
+      assert.equal(error.retryable, false);
+      assert.equal(error.message.includes("undefined"), false);
+      return true;
+    });
+  assert.equal(fetchCalls, 0);
+});
+
 test("STT Abort timeout 映射为稳定可重试错误", async () => {
   await assert.rejects(() => requestOpenAiTranscription({ OPENAI_API_KEY: "sk-test-secret" },
     analysis("ana_1", 3), audioStream([new Uint8Array([1, 2, 3])]),
@@ -126,6 +230,8 @@ async function consume(stream) {
   const reader = stream.getReader();
   while (!(await reader.read()).done) { /* 测试刻意不收集 chunk，验证消费不依赖聚合缓冲。 */ }
 }
+
+async function readBodyText(stream) { return new Response(stream).text(); }
 
 async function readChunks(stream) {
   const bytes = [];

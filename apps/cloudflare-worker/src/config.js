@@ -3,6 +3,11 @@ import { WorkerError } from "./errors.js";
 const TEN_MIB = 10 * 1024 * 1024;
 const EIGHT_HUNDRED_MIB = 800 * 1024 * 1024;
 const ONE_MINUTE_MS = 60 * 1000;
+const DEFAULT_OPENAI_STT_URL = "https://api.openai.com/v1/audio/transcriptions";
+const DEFAULT_OPENAI_STT_MODEL = "whisper-1";
+const MAX_OPENAI_STT_URL_LENGTH = 2048;
+const MAX_OPENAI_STT_MODEL_LENGTH = 128;
+const CONTROL_CHARACTERS = /[\u0000-\u001F\u007F-\u009F]/;
 
 /** 运行时配置只读取非敏感 vars；secret 缺失在真正使用对应能力时 fail closed。 */
 export function runtimeConfig(env) {
@@ -29,6 +34,16 @@ export function requiredSecret(env, name) {
   const value = env[name];
   if (!value) throw new WorkerError("SERVICE_NOT_CONFIGURED", `${name} 未配置`, 503);
   return value;
+}
+
+/**
+ * 读取 OpenAI-compatible STT 的部署配置；URL 和模型只允许由 Worker 环境提供，不能由请求体覆盖。
+ * URL 保持为完整 POST endpoint，方便官方与中转服务分别使用自己的路径，同时在发起音频请求前 fail closed。
+ */
+export function openAiSttConfig(env) {
+  const urlValue = env?.OPENAI_STT_URL === undefined ? DEFAULT_OPENAI_STT_URL : env.OPENAI_STT_URL;
+  const modelValue = env?.OPENAI_STT_MODEL === undefined ? DEFAULT_OPENAI_STT_MODEL : env.OPENAI_STT_MODEL;
+  return Object.freeze({ url: validateSttUrl(urlValue), model: validateSttModel(modelValue) });
 }
 
 /** STT 返回时长是服务端可信来源；浏览器声明只用于 UX 预检，不参与最终判定。 */
@@ -63,6 +78,37 @@ function positiveInt(value, fallback) {
   const result = value === undefined ? fallback : Number(value);
   if (!Number.isInteger(result) || result <= 0) throw new WorkerError("INVALID_CONFIG", "运行时数值配置无效", 500);
   return result;
+}
+
+/** URL 必须是无凭据、无查询参数的 HTTPS 完整 endpoint；原始配置值不会进入异常消息或日志。 */
+function validateSttUrl(value) {
+  if (typeof value !== "string") throw sttConfigError();
+  const raw = value;
+  if (!raw || raw.length > MAX_OPENAI_STT_URL_LENGTH || raw !== raw.trim()
+    || CONTROL_CHARACTERS.test(raw) || /\s/.test(raw)) {
+    throw sttConfigError();
+  }
+  // URL 构造器会把末尾的裸 ?/# 归一为空字符串，因此先检查原文以确保它们也被拒绝。
+  if (raw.includes("?") || raw.includes("#")) throw sttConfigError();
+  let parsed;
+  try { parsed = new URL(raw); } catch { throw sttConfigError(); }
+  const authorityStart = raw.indexOf("://") + 3;
+  const authorityEnd = raw.indexOf("/", authorityStart);
+  const authority = raw.slice(authorityStart, authorityEnd < 0 ? raw.length : authorityEnd);
+  if (parsed.protocol !== "https:" || !parsed.hostname || parsed.username || parsed.password
+    || parsed.search || parsed.hash || authority.includes("@")) throw sttConfigError();
+  return parsed.toString();
+}
+
+/** 模型允许中转服务的安全别名，但拒绝空白、控制字符和过长值，避免 multipart 内容注入。 */
+function validateSttModel(value) {
+  if (typeof value !== "string" || !value || value.length > MAX_OPENAI_STT_MODEL_LENGTH
+    || CONTROL_CHARACTERS.test(value) || /\s/.test(value)) throw sttConfigError();
+  return value;
+}
+
+function sttConfigError() {
+  return Object.assign(new WorkerError("STT_CONFIG_INVALID", "STT 配置无效", 503), { retryable: false });
 }
 
 function guardLevel(value) {

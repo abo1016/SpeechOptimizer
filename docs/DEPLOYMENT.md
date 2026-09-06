@@ -1,6 +1,6 @@
 # SpeechOptimizer 部署运行手册
 
-> 最后更新：2026-09-05（Asia/Shanghai）
+> 最后更新：2026-09-06（Asia/Shanghai）
 >
 > 当前状态：**Cloudflare 免费层迁移进行中。Preview 的 Phase 1 HTTP smoke 已通过；本轮高优先级代码纠偏与本地 Gate 已通过，Preview D1 `0003`～`0006` 已完成受控应用与复核，但当前审查版本尚未部署，Storage、Queue/Workflow 与认证的真实 E2E 仍待远程资源 Gate。Production D1 仍待 `0003`～`0006`，Production Worker 不存在，尚未部署或切流。** 本文只描述后续受控发布流程，不把本地测试、`wrangler deploy --dry-run` 或既有 Phase 1 部署记录当作 Production 验收。
 
@@ -20,9 +20,9 @@
 - Preview `speechoptimizer-preview` 的 `0003`～`0006` 首次 `migrations apply` 因 Cloudflare API timeout，post-list 仍显示四项待应用；主控只放行一次受控重试后四项逐个成功，exit `0`，最终 `migrations list` 返回 `No migrations to apply!`。Wrangler 输出未显示 backup/bookmark，不记录或声称存在备份/书签证据。
 - Production `speechoptimizer-production` 仍待应用 `0003_analysis_pagination_and_retention.sql`、`0004_account_deletion_and_storage_reservations.sql`、`0005_upload_tickets_and_dispatch_recovery.sql` 与 `0006_dlq_admin_recovery.sql`；本次未触碰 Production，后续仍须重新列出并应用**所有**未应用 migration。
 - 四个 Preview/Production Queue 与 DLQ 已存在，但当前 producer/consumer 均为 `0`；不得把资源存在误写为 Queue consumer、Workflow、Storage 或 Cron 已在当前线上版本生效。
-- Preview 的真实 E2E 仍缺可用的 Supabase server secret（`SUPABASE_SECRET_KEY` 或兼容的 `SUPABASE_SERVICE_ROLE_KEY`）和 `OPENAI_API_KEY`。完整认证 E2E 还取决于本手册第 4 节列出的运行时配置是否真实存在。
+- 2026-09-06 已通过 `wrangler secret list --env preview --format json` 只读确认 Preview 的 `SUPABASE_SECRET_KEY` 与 `OPENAI_API_KEY` **名称存在**；该命令不读取、验证、导出或回显值，因此不能证明值可用、是否已轮换或真实 E2E 已通过。Worker 仍应只将它们作为 Secret 使用。AIHubMix 的 `OPENAI_STT_URL`/`OPENAI_STT_MODEL` 已进入审查配置，真实转写兼容性仍须由 E2E 验证。
 - 本轮 Worker 高优先级代码纠偏、DLQ 管理闭环与 Wrangler generated types Gate 已完成本地验收；Preview D1 远端 apply/recheck 已完成，但当前审查版本尚未部署，Preview Secrets、真实流式 STT 与 Free CPU/完整性 Spike 仍未完成。
-- 当前审查版本的 Preview Worker 尚未部署；Preview 仍缺 Supabase server secret 与 `OPENAI_API_KEY`。Production D1、Production Worker、Production secrets、真实 E2E 与公网切流均未完成。
+- 当前审查版本的 Preview Worker 尚未部署；两个 Preview Secret 的名称级 Gate 已关闭，但其有效性、轮换状态及 AIHubMix 音频转写兼容性仍未由真实流程证明。Production D1、Production Worker、Production secrets、真实 E2E 与公网切流均未完成。
 - Production 的 `wrangler.jsonc` 目标配置已存在，但 Production Worker 不存在；独立 Production secrets、真实 E2E 与公网切流均**未验收**。
 
 旧 OpenAI Sites + Railway Demo/Mock 路径不再是新功能的主发布路径。迁移期间它们只作为回退链保留；不得删除 Railway service、持久卷、Sites 配置或旧数据，也不得把其历史健康检查当作 Cloudflare Production 成功证据。
@@ -62,7 +62,7 @@ pnpm --dir apps/cloudflare-worker exec wrangler deploy --env preview --dry-run
 - Preview Supabase bucket 为 private，只允许产品当前支持的 `audio/webm`，单对象最大 10 MiB；不得把 bucket 改为公开，也不得用公开 key 代替 server secret。
 - Wrangler 配置要求 Preview 使用独立的 Queue 和 DLQ：`speechoptimizer-preview-analysis` 与 `speechoptimizer-preview-analysis-dlq`；Workflow 名称为 `speechoptimizer-preview-analysis`；Cron 配置为每日 `17 3 * * *`。现有远端 Queue 的 producer/consumer 均为 `0`，必须在本轮版本部署后重新核验绑定与消费，不得提前标记为已启用。
 - `ALLOWED_ORIGINS` 只包含确认的 Preview origin；Google OAuth redirect URI、Resend 发件域和 Turnstile hostname 与实际 Preview URL 完全一致。
-- `SUPABASE_URL`、`SUPABASE_STORAGE_BUCKET`、`TURNSTILE_SITE_KEY`、大小/时长/免费额度参数是非敏感运行时变量；任何修改都应通过审查后的 Wrangler 配置发布，不应临时在 Dashboard 漂移。
+- `SUPABASE_URL`、`SUPABASE_STORAGE_BUCKET`、`TURNSTILE_SITE_KEY`、`OPENAI_STT_URL`、`OPENAI_STT_MODEL`、大小/时长/免费额度参数是非敏感运行时变量；任何修改都应通过审查后的 Wrangler 配置发布，不应临时在 Dashboard 漂移。
 
 历史记录中曾确认 Preview Turnstile 验证 secret 已写入，但发布前仍应只读确认 secret 名称存在。名称存在不代表完整认证、Storage 或 Provider 流程已经通过。
 
@@ -94,7 +94,9 @@ D1 migration 采用向前兼容的 expand/migrate/contract 策略。Worker 版�
 | 变量 | 用途 | 管理要求 |
 | --- | --- | --- |
 | `SUPABASE_SECRET_KEY` | Supabase signed upload、对象 metadata/Range 校验、对象删除 | Preview 独立 server secret；兼容期可改用 `SUPABASE_SERVICE_ROLE_KEY`，两者不要混用为浏览器变量 |
-| `OPENAI_API_KEY` | Workflow 中的真实 STT 调用 | Preview 专用、可撤销，绝不写入 D1、对象 metadata、日志或 `VITE_*` |
+| `OPENAI_STT_URL` | OpenAI-compatible STT 的完整 `POST` endpoint | 非敏感 Wrangler `vars`；只允许 HTTPS，不得包含 userinfo、query、fragment 或 API key；Preview/Production 分别显式配置 |
+| `OPENAI_STT_MODEL` | STT multipart 请求中的 `model` 字段 | 非敏感 Wrangler `vars`；必须与目标中转兼容，并支持下述逐词时间戳响应契约 |
+| `OPENAI_API_KEY` | 配置的 OpenAI-compatible STT 鉴权 | Preview 专用、可撤销的 Worker Secret；只进入 `Authorization: Bearer`，绝不写入 URL、D1、对象 metadata、日志或 `VITE_*` |
 | `COOKIE_SECRET` | 匿名 Cookie、Session 与 OAuth state 绑定签名 | 使用独立高熵值，不与任何旧服务共用 |
 | `TURNSTILE_SECRET_KEY` | Magic Link、Google OAuth、匿名分析的人机验证 | 仅 Worker Secret；站点 key 是非敏感变量，不能替代验证 secret |
 | `RESEND_API_KEY`、`MAGIC_LINK_FROM` | Magic Link 邮件投递与已验证发件地址 | 使用 Preview 发件身份；不得将邮件 token 记录到日志 |
@@ -111,6 +113,8 @@ pnpm --dir apps/cloudflare-worker exec wrangler secret list --env preview --form
 ```
 
 每项 Secret 写入后只记录“名称存在、环境、写入时间、操作者和轮换标识”。不要将值粘贴到 PR、Issue、聊天记录、部署日志或截图。Production 必须在 Preview E2E Gate 通过后，使用全新的 Production 值重复此流程。
+
+当前 Worker 只接受 OpenAI-compatible 的音频转写契约：向 `OPENAI_STT_URL` 发送 `POST multipart/form-data`，携带 `file`、`model`、`response_format=verbose_json` 与 `timestamp_granularities[]=word`，并使用 Bearer 鉴权。中转响应至少需要提供 `text`、可信 `duration` 与逐词 `words`；最好正确处理 `Idempotency-Key`，避免 Workflow 重试造成重复计费。若中转使用不同路径、鉴权方式、请求字段或响应包装，必须先实现并测试显式 adapter，不能仅修改环境变量后直接部署。
 
 ## 5. Preview 部署与 smoke
 
@@ -163,7 +167,7 @@ curl -sS -i "$PREVIEW_BASE_URL/api/v1/not-found"
 | Magic Link | Turnstile 校验、邮件送达、链接只能消费一次、过期/重复消费返回稳定错误、Session Cookie 可建立和注销 |
 | Google OAuth | 发起和回调都在同一浏览器完成，state Cookie 绑定有效，错误或完成后旧 state Cookie 被清除 |
 | 上传 | 创建分析有 Idempotency-Key；Worker 只签发当前分析的单对象 URL；浏览器直传 private bucket；错误大小、MIME、SHA-256 或 WebM 魔数被拒绝 |
-| 分析 | `audio-complete` 后任务进入 Queue/Workflow；真实 OpenAI STT 成功后可读报告和历史；重复完成仅接受完全一致的请求，篡改请求返回冲突 |
+| 分析 | `audio-complete` 后任务进入 Queue/Workflow；配置的 OpenAI-compatible STT 成功后可读报告和历史；重复完成仅接受完全一致的请求，篡改请求返回冲突 |
 | 失败和重试 | Provider 超时/拒绝能落为稳定错误状态；可重试任务不重复生成报告或额外消耗额度；不可重试任务不进入无界重试 |
 | 隐私和清理 | 删除分析会删除关联对象；账户删除会撤销 Session、删除关联数据与对象；Cron 运行后处理孤儿、过期认证记录和延迟删除 |
 | 免费护栏 | `FREE_TIER_GUARD_LEVEL=80/90/95` 的降级行为与代码一致：80 暂停匿名分析，90 暂停新分析，95 进一步暂停新上传，读取路径保持可用 |
@@ -212,7 +216,7 @@ Preview 故障同样使用 `--env preview`。回滚后重新检查 `/health`、�
 | 时间点 | 检查项 | 触发动作 |
 | --- | --- | --- |
 | 切流后 0-2 小时 | Worker HTTP 5xx、`/health`、静态资源、认证失败、Storage 签发/完成、Queue backlog/DLQ、Workflow 成功率 | 严重回归先停止切流或回滚 Worker 版本 |
-| 每日 | Workers 请求量/CPU/错误率、D1 行读写/存储、Queue 操作与 DLQ、Workflow 步数/失败、Supabase Storage/egress、OpenAI 错误与成本、Turnstile/邮件/OAuth 异常 | 接近资源阈值时提高 `FREE_TIER_GUARD_LEVEL`，暂停放量并调查 |
+| 每日 | Workers 请求量/CPU/错误率、D1 行读写/存储、Queue 操作与 DLQ、Workflow 步数/失败、Supabase Storage/egress、当前 STT 中转的错误、限流与成本、Turnstile/邮件/OAuth 异常 | 接近资源阈值时提高 `FREE_TIER_GUARD_LEVEL`，暂停放量并调查 |
 | 每日 | 分析删除、账户删除、Cron 清理、孤儿对象与过期认证记录 | 清理失败不删除证据；先修复后以受控任务重试 |
 | 72 小时结束 | 所有 E2E 主链仍可复现、无未解释的 DLQ/Workflow 积压、恢复方案可用、无密钥/隐私泄露、资源未越过护栏 | 由 owner 决定是否提高配额、延长观察或开始旧服务下线评估 |
 

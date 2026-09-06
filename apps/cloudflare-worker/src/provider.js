@@ -1,21 +1,16 @@
-import { requiredSecret } from "./config.js";
+import { openAiSttConfig, requiredSecret } from "./config.js";
 import { logEvent } from "./logger.js";
 
 const STT_REQUEST_TIMEOUT_MS = 90 * 1000;
 const encoder = new TextEncoder();
 
 /**
- * 调用 OpenAI STT 时使用固定分析 ID 作为幂等键，并由调用方所在 Workflow 最多重放两次。
+ * 调用 OpenAI-compatible STT 时使用固定分析 ID 作为幂等键，并由调用方所在 Workflow 最多重放两次。
  * audio 必须是对象存储返回的原始字节流，禁止传入 ArrayBuffer、Blob 或 File，避免完整音频驻留 Worker 内存。
  */
 export async function requestOpenAiTranscription(env, analysis, audio, fetchImpl = fetch, timeoutMs = STT_REQUEST_TIMEOUT_MS) {
-  let apiKey;
-  try {
-    apiKey = requiredSecret(env, "OPENAI_API_KEY");
-  } catch {
-    throw providerError("STT_NOT_CONFIGURED", "STT 服务未配置", false, 503);
-  }
-  const multipart = createTranscriptionMultipart(analysis, audio);
+  const providerConfig = resolveProviderConfig(env);
+  const multipart = createTranscriptionMultipart(analysis, audio, providerConfig.model);
   const signal = AbortSignal.timeout(timeoutMs);
   const cancelStream = () => { void multipart.cancel(signal.reason); };
   signal.addEventListener("abort", cancelStream, { once: true });
@@ -23,8 +18,8 @@ export async function requestOpenAiTranscription(env, analysis, audio, fetchImpl
     provider: "openai", operation: "transcription", contentLength: multipart.contentLength,
   });
   try {
-    const response = await fetchImpl("https://api.openai.com/v1/audio/transcriptions", {
-      method: "POST", headers: transcriptionHeaders(apiKey, analysis.id, multipart), body: multipart.body, signal,
+    const response = await fetchImpl(providerConfig.url, {
+      method: "POST", headers: transcriptionHeaders(providerConfig.apiKey, analysis.id, multipart), body: multipart.body, signal,
     });
     if (!response.ok) {
       await multipart.cancel(`OpenAI returned ${response.status}`);
@@ -54,10 +49,10 @@ export async function requestOpenAiTranscription(env, analysis, audio, fetchImpl
 }
 
 /** 为 multipart 每段精确计算字节长度；文件字节直接透传，不会拼接成新数组。 */
-function createTranscriptionMultipart(analysis, audio) {
+function createTranscriptionMultipart(analysis, audio, model) {
   const declaration = audioDeclaration(analysis, audio);
   const boundary = `speechoptimizer-${crypto.randomUUID().replaceAll("-", "")}`;
-  const prefix = encoder.encode(`--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\nwhisper-1\r\n`
+  const prefix = encoder.encode(`--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\n${model}\r\n`
     + `--${boundary}\r\nContent-Disposition: form-data; name="response_format"\r\n\r\nverbose_json\r\n`
     + `--${boundary}\r\nContent-Disposition: form-data; name="timestamp_granularities[]"\r\n\r\nword\r\n`
     + `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="speech.webm"\r\nContent-Type: ${declaration.mime}\r\n\r\n`);
@@ -149,6 +144,20 @@ function transcriptionHeaders(apiKey, analysisId, multipart) {
   return headers;
 }
 
+/** 在读取或发送音频前解析 Secret、完整 endpoint 和模型；配置错误不进入 Workflow 重试。 */
+function resolveProviderConfig(env) {
+  try {
+    const { url, model } = openAiSttConfig(env);
+    const apiKey = requiredSecret(env, "OPENAI_API_KEY");
+    return { apiKey, url, model };
+  } catch (cause) {
+    const error = providerError(cause?.code === "SERVICE_NOT_CONFIGURED" ? "STT_NOT_CONFIGURED" : "STT_CONFIG_INVALID",
+      cause?.code === "SERVICE_NOT_CONFIGURED" ? "STT 服务未配置" : "STT 配置无效", false, 503);
+    logProviderFailure(error);
+    throw error;
+  }
+}
+
 /** 将对象流验证失败保留为不可重试业务错误，网络与超时仍沿用既有稳定 Provider 映射。 */
 function requestFailure(signal, cause) {
   if (cause?.code === "AUDIO_SIZE_MISMATCH" || cause?.code === "AUDIO_STREAM_INVALID" || cause?.code === "AUDIO_MIME_MISMATCH") return cause;
@@ -158,7 +167,8 @@ function requestFailure(signal, cause) {
 
 /** 非 2xx 与响应解析已完成稳定映射，外层清理流资源时不得再次包装为网络错误。 */
 function isNormalizedProviderError(error) {
-  return error?.code === "STT_UNAVAILABLE" || error?.code === "STT_REQUEST_REJECTED" || error?.code === "STT_RESPONSE_INVALID";
+  return error?.code === "STT_NOT_CONFIGURED" || error?.code === "STT_CONFIG_INVALID"
+    || error?.code === "STT_UNAVAILABLE" || error?.code === "STT_REQUEST_REJECTED" || error?.code === "STT_RESPONSE_INVALID";
 }
 
 function streamError(code, message, status) { return Object.assign(new Error(message), { code, retryable: false, status }); }

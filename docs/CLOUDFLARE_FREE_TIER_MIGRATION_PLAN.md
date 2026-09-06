@@ -1,6 +1,6 @@
 # SpeechOptimizer Cloudflare 全栈免费层改造方案
 
-> 状态：Phase 1 本地与远程 HTTP Gate 已完成；Phase 2～4 的本地实现、高优先级一致性修复、DLQ 管理闭环与 Wrangler generated types Gate 已通过。Preview D1 已完成 `0003`～`0006` 的受控应用与复核；当前外部 Gate 是配置 Preview Supabase server secret 与 `OPENAI_API_KEY`、部署当前审查版本、验证真实 Supabase/Workflow/OpenAI 流式 E2E、为 Production 应用 `0003`～`0006` 并完成 Free CPU/完整性 Spike；Production 尚未部署或切流。
+> 状态：Phase 1 本地与远程 HTTP Gate 已完成；Phase 2～4 的本地实现、高优先级一致性修复、DLQ 管理闭环与 Wrangler generated types Gate 已通过。Preview D1 已完成 `0003`～`0006` 的受控应用与复核，2026-09-06 已名称级确认 Preview `SUPABASE_SECRET_KEY` 与 `OPENAI_API_KEY` 存在（未读取或验证其值）；当前外部 Gate 是部署当前审查版本、验证真实 Supabase/Workflow/AIHubMix 流式 E2E，并完成 Free CPU/完整性 Spike。Production 尚未部署或切流。
 > 编制日期：2026-09-05
 > 目标：在不使用 Railway、Vercel 和 Cloudflare Container 的前提下，将公开站点、真实认证、音频分析与数据持久化迁移到 Cloudflare 免费额度内。第三方 OpenAI、Resend、域名和支付渠道费用不属于 Cloudflare 免费额度。
 
@@ -65,7 +65,7 @@ Browser
                                                          ▼
                                                    Analysis Workflow
                                                   ├── Storage 元数据/读取
-                                                  ├── OpenAI STT
+                                                  ├── 可配置 OpenAI-compatible STT
                                                   ├── 本地 Feedback 引擎（未来可替换为 Provider）
                                                   └── D1 + Storage 结果
 ```
@@ -78,7 +78,7 @@ Browser
 - Queue：`speechoptimizer-analysis`，只传递 `analysisId`、`attempt` 和事件版本。
 - Dead Letter Queue：`speechoptimizer-analysis-dlq`，保存耗尽重试次数的任务引用。
 - Workflow：`SpeechAnalysisWorkflow`，编排转写、反馈、持久化和清理。
-- Secrets：Google、Resend、OpenAI、Cookie/Token 签名和未来支付密钥。
+- Secrets：Google、Resend、OpenAI-compatible STT、Cookie/Token 签名和未来支付密钥；STT endpoint 与模型是逐环境显式配置的非敏感 vars，鉴权 key 单独作为 Secret。
 - Turnstile：保护 Magic Link、Google OAuth 启动和匿名分析入口。
 
 ## 5. 数据与一致性设计
@@ -196,7 +196,7 @@ Gate：跨用户访问被拒绝；重复完成、篡改 Key、超限文件和孤
 
 - 用 Queue 替换 `AnalysisRunner.schedule()`，生产环境不再调用 `setImmediate`。
 - Workflow 分离校验、转写、反馈、持久化和清理步骤；支付权益确认属于未来支付启用范围。
-- 外部 OpenAI STT 请求配置超时、有限重试、幂等键和稳定错误映射；当前反馈由本地引擎生成，未来接入反馈 Provider 时复用同一约束。
+- 外部 OpenAI-compatible STT 的完整 HTTPS endpoint、模型与 Bearer key 均由环境配置；请求保留 multipart `file`、`verbose_json`、逐词时间戳、超时、有限重试、幂等键和稳定错误映射。当前反馈由本地引擎生成，未来接入反馈 Provider 时复用同一约束。
 - DLQ 仅保存任务引用；后台管理页展示失败原因并支持受控重试。
 
 Gate：重复消息、乱序消息、Worker 重启、Provider 超时、取消竞态和重试耗尽均保持正确状态与免费配额；支付权益不属于免费 Beta Gate。
@@ -403,7 +403,7 @@ Cloudflare OAuth 已确认具备 `challenge-widgets.write`，账户原有 Turnst
 - Preview `speechoptimizer-preview` 执行 `0003`～`0006` 的 `migrations apply` 首次因 Cloudflare API timeout 失败；随后只放行一次受控重试，四项迁移逐个成功，命令 exit `0`，最终 `migrations list` 返回 `No migrations to apply!`。
 - 首次失败后的 post-list 仍显示 `0003`～`0006` 四项待应用；重试完成后的最终列表不再有待应用迁移。Wrangler 输出未显示 backup/bookmark，因此不记录或声称存在备份/书签证据。
 - Production `speechoptimizer-production` 仍待应用 `0003`～`0006`；本次没有触碰 Production 的 migration，未执行其 `migrations apply`/`execute`。
-- 当前审查工作树对应的 Preview Worker 尚未部署；Preview 仍缺 `SUPABASE_SECRET_KEY`（或兼容 `SUPABASE_SERVICE_ROLE_KEY`）与 `OPENAI_API_KEY`。
+- 当前审查工作树对应的 Preview Worker 尚未部署；该历史 checkpoint 的 Secret 缺失结论已由 17.10 后的 2026-09-06 名称级复核更新，不代表值有效或真实 E2E 已完成。
 
 上述记录只证明 Preview D1 迁移已完成受控应用与复核，不代表 Secrets 写入、当前 Worker 部署、真实 E2E、Production D1 迁移或 DNS 操作已完成。
 
@@ -411,9 +411,25 @@ Cloudflare OAuth 已确认具备 `challenge-widgets.write`，账户原有 Turnst
 
 当前未完成任务按顺序固定为（Preview D1 迁移项已从队列移除）：
 
-1. 由 owner 将可撤销的 Preview `SUPABASE_SECRET_KEY`（或兼容 service-role key）与 `OPENAI_API_KEY` 安全写入 Worker Secrets。
-2. 以审查后的固定 commit 重新部署 Preview，验证 bindings、Queue consumer、Workflow、Cron 与 `/health`。
-3. 执行 Magic Link、Google OAuth、唯一 signed upload、1/5/10 MiB WebM、流式 STT、DLQ/管理员恢复、历史、删除、账户删除和 Cron 清理 E2E；记录 CPU、内存、Storage/egress、D1 rows、Queue ops 与 Workflow steps。
-4. Preview Gate 全部通过后，为 Production D1 应用全部待迁移项 `0003`～`0006`；Production 仍须独立执行并留存结果。
-5. Production D1 通过复核后，再准备独立 Production secrets、部署 Production Worker、绑定正式域名并执行生产 smoke。
-6. 生产小流量运行至少 72 小时后，再由 owner 决定是否提高配额或下线旧 Sites/Railway 回退链。
+1. 以审查后的固定 commit 重新部署 Preview，验证 bindings、Queue consumer、Workflow、Cron 与 `/health`；名称存在不等于 Secret 值可用，运行期失败必须如实记录。
+2. 执行 Magic Link、Google OAuth、唯一 signed upload、1/5/10 MiB WebM、流式 STT、DLQ/管理员恢复、历史、删除、账户删除和 Cron 清理 E2E；记录 CPU、内存、Storage/egress、D1 rows、Queue ops 与 Workflow steps。
+3. Preview Gate 全部通过后，为 Production D1 应用全部待迁移项 `0003`～`0006`；Production 仍须独立执行并留存结果。
+4. Production D1 通过复核后，再准备独立 Production secrets、部署 Production Worker、绑定正式域名并执行生产 smoke。
+5. 生产小流量运行至少 72 小时后，再由 owner 决定是否提高配额或下线旧 Sites/Railway 回退链。
+
+### 17.10 2026-09-05 OpenAI-compatible 中转配置与重新验收（当前最新）
+
+Owner 明确真实 STT 使用 OpenAI-compatible 中转，不应把官方 OpenAI endpoint、模型或密钥来源硬编码为部署前提。Worker 已将真实转写依赖冻结为三个逐环境配置项：`OPENAI_STT_URL` 是完整 HTTPS `POST` endpoint，`OPENAI_STT_MODEL` 是 multipart 模型字段，两者属于非敏感 Wrangler `vars`；`OPENAI_API_KEY` 只作为 Worker Secret 并仅进入 Bearer 鉴权。未设置 URL/model 时仍保留官方 endpoint 与 `whisper-1` 默认值，显式配置为空或包含不安全 URL/userinfo/query/fragment、空白、控制字符或超长模型时会在外部 fetch 前以不可重试的 `STT_CONFIG_INVALID` fail closed。客户端不能覆盖 endpoint、模型、鉴权、逐词时间戳或重试策略。
+
+当前 multipart 与响应契约仍是 `file`、`model`、`response_format=verbose_json`、`timestamp_granularities[]=word`，响应必须提供 `text`、可信 `duration` 与逐词 `words`。因此“支持 OpenAI Responses/Chat API”不等于“支持本项目 STT”；若中转没有 `/audio/transcriptions`、`whisper-1` 或同等逐词时间戳兼容能力，必须选择另一 STT Provider 或实现独立 adapter，不能仅替换 base URL。AI INPUT 当前账号页面只展示 Codex `Responses` 配置和 GPT/Codex 模型监控，尚未找到音频转写兼容证据，不能把它写成已验证 STT Provider。
+
+本次配置行为变更已增加 Level 2 回归，覆盖官方默认 URL/model、中转完整 endpoint/model、Bearer-only API key、multipart 字段契约、非法 URL/model 与缺少 Secret 时不发起 fetch。主控完成以下重新验收：
+
+- `pnpm --dir apps/cloudflare-worker run test`：`48/48` 通过；所有 Provider 测试使用注入的 fake fetch，没有真实网络请求或真实密钥。
+- Preview `pnpm --dir apps/cloudflare-worker run dry-run`：exit `0`，显示 D1、Queue、Workflow、Assets 与两个新增 STT vars；仅 dry-run，没有部署。
+- `pnpm --dir apps/cloudflare-worker run check` 与 `types:check:production`：均 exit `0`；Wrangler `4.129.0` generated types 与 Preview/Production 配置一致。
+- 全新临时 D1 依次应用 `0001`～`0006`：六项均成功，`d1_migrations` ID 1～6 与文件顺序一致，最终 `No migrations to apply!`，`PRAGMA foreign_key_check` 为空；临时目录已移出工作区并清理。
+- `git diff --check`：exit `0`。Wrangler `4.129.0` 的生成类型含固定尾随空格；`.gitattributes` 仅对该逐字生成文件关闭 Git whitespace 检查，以同时保持 `wrangler types --check` 与仓库 diff Gate 可重复通过。
+- 常规与 `TZ=UTC` 两轮 `CI=1 node scripts/quality-gate.mjs all --require-feature-tests` 均 exit `0`；每轮 26 个子门禁和当前合计 `228/228` 项测试通过。
+
+浏览器自动化核验曾使旧 Supabase Preview server key 与 AI INPUT key 的完整值进入受限工具输出；迁移记录和代码未保存或回显这些值。2026-09-06 使用 `wrangler secret list --env preview --format json` 做了**名称级**只读复核，已确认 Preview 存在 `SUPABASE_SECRET_KEY` 与 `OPENAI_API_KEY`，但 Wrangler 不能借此确认值有效、轮换状态或 Provider 授权范围，且本轮未读取值。因而“Secret 名称缺失”不再是部署 blocker；真实 Supabase、Queue/Workflow、STT 与 1/5/10 MiB Spike 仍必须在新不可变 commit 部署后完成，AIHubMix 的完整音频转写契约也只能由真实流程验证。Production D1、Production secrets、Production Worker 与 DNS 仍未触碰。

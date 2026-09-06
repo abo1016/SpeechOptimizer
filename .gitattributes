@@ -1,0 +1,2 @@
+# Wrangler 生成类型必须逐字保留，避免格式化器破坏 `wrangler types --check` 的一致性校验。
+apps/cloudflare-worker/worker-configuration.d.ts -whitespace
