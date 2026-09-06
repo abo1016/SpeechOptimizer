@@ -2,7 +2,7 @@
 
 > 最后更新：2026-09-06（Asia/Shanghai）
 >
-> 当前状态：**Cloudflare 免费层迁移进行中。Preview 的 Phase 1 HTTP smoke 已通过；本轮高优先级代码纠偏与本地 Gate 已通过，Preview D1 `0003`～`0006` 已完成受控应用与复核，但当前审查版本尚未部署，Storage、Queue/Workflow 与认证的真实 E2E 仍待远程资源 Gate。Production D1 仍待 `0003`～`0006`，Production Worker 不存在，尚未部署或切流。** 本文只描述后续受控发布流程，不把本地测试、`wrangler deploy --dry-run` 或既有 Phase 1 部署记录当作 Production 验收。
+> 当前状态：**Cloudflare 免费层迁移进行中。Preview D1 `0003`～`0006` 已完成受控应用与复核，固定提交 `c8b7078` 已部署到 `speechoptimizer-web-preview`，远端 Queue producer/consumer、Workflow、Cron handler 与 `/health` bindings 均已出现。发布后浏览器 smoke 发现前端 API client 只解包 `{data}`，而公开 `/health` 返回顶层 JSON，导致 bootstrap 读取 `health.mode` 失败；本地兼容修复与回归 Gate 已通过，仍待以新的固定 SHA 重新部署并复核真实 E2E。Production D1 仍待 `0003`～`0006`，Production Worker 不存在，尚未部署或切流。** 本文只描述后续受控发布流程，不把本地测试、`wrangler deploy --dry-run` 或 HTTP smoke 当作 Production 验收。
 
 ## 1. 范围与当前事实
 
@@ -19,10 +19,10 @@
 - Phase 1 正式 Preview HTTP smoke 已通过：`/` 为 `200`、`/history` 为 `200`、`/health` 返回 JSON `200`、`POST /health` 返回 JSON `405`、未知 API 返回 JSON `404`。这些证据只覆盖静态资源和路由，不证明本轮功能资源已经上线。
 - Preview `speechoptimizer-preview` 的 `0003`～`0006` 首次 `migrations apply` 因 Cloudflare API timeout，post-list 仍显示四项待应用；主控只放行一次受控重试后四项逐个成功，exit `0`，最终 `migrations list` 返回 `No migrations to apply!`。Wrangler 输出未显示 backup/bookmark，不记录或声称存在备份/书签证据。
 - Production `speechoptimizer-production` 仍待应用 `0003_analysis_pagination_and_retention.sql`、`0004_account_deletion_and_storage_reservations.sql`、`0005_upload_tickets_and_dispatch_recovery.sql` 与 `0006_dlq_admin_recovery.sql`；本次未触碰 Production，后续仍须重新列出并应用**所有**未应用 migration。
-- 四个 Preview/Production Queue 与 DLQ 已存在，但当前 producer/consumer 均为 `0`；不得把资源存在误写为 Queue consumer、Workflow、Storage 或 Cron 已在当前线上版本生效。
+- 四个 Preview/Production Queue 与 DLQ 已存在；`c8b7078` 部署后只读复核显示 Preview 主 Queue `speechoptimizer-preview-analysis` 为 `1 producer / 1 consumer`，Preview Workflow `speechoptimizer-preview-analysis` 已绑定到 `speechoptimizer-web-preview`，Production Queue/DLQ 仍为 `0/0`。DLQ 没有 consumer 属于当前设计，不得据此声称完整业务 E2E 已通过。
 - 2026-09-06 已通过 `wrangler secret list --env preview --format json` 只读确认 Preview 的 `SUPABASE_SECRET_KEY` 与 `OPENAI_API_KEY` **名称存在**；该命令不读取、验证、导出或回显值，因此不能证明值可用、是否已轮换或真实 E2E 已通过。Worker 仍应只将它们作为 Secret 使用。AIHubMix 的 `OPENAI_STT_URL`/`OPENAI_STT_MODEL` 已进入审查配置，真实转写兼容性仍须由 E2E 验证。
-- 本轮 Worker 高优先级代码纠偏、DLQ 管理闭环与 Wrangler generated types Gate 已完成本地验收；Preview D1 远端 apply/recheck 已完成，但当前审查版本尚未部署，Preview Secrets、真实流式 STT 与 Free CPU/完整性 Spike 仍未完成。
-- 当前审查版本的 Preview Worker 尚未部署；两个 Preview Secret 的名称级 Gate 已关闭，但其有效性、轮换状态及 AIHubMix 音频转写兼容性仍未由真实流程证明。Production D1、Production Worker、Production secrets、真实 E2E 与公网切流均未完成。
+- `c8b7078c9e379ea3f1b5dd1068a1d9db3993c23a` 已于 2026-09-06 部署到 Preview，Version ID 为 `7ce40b6f-f8a8-41b8-901a-1f1858f38305`；`/health` 返回该完整 SHA，且报告 assets、D1、Storage、Queue、Workflow bindings 均可用。该版本的浏览器 bootstrap 仍因 `/health` 响应解包契约不一致失败，因此不能作为可验收 Preview 版本。
+- 针对上述浏览器 blocker 的 API client 兼容修复已完成本地定向回归、常规与 `TZ=UTC` 双轮完整质量门禁、Preview dry-run 与 Preview/Production generated-types 检查；修复版本仍须以新的固定 SHA 部署后重新做浏览器、Storage、Queue/Workflow、STT、认证与性能 E2E。两个 Preview Secret 的名称级 Gate 已关闭，但其有效性、轮换状态及 AIHubMix 音频转写兼容性仍须由真实流程证明。Production D1、Production Worker、Production secrets 与公网切流均未触碰。
 - Production 的 `wrangler.jsonc` 目标配置已存在，但 Production Worker 不存在；独立 Production secrets、真实 E2E 与公网切流均**未验收**。
 
 旧 OpenAI Sites + Railway Demo/Mock 路径不再是新功能的主发布路径。迁移期间它们只作为回退链保留；不得删除 Railway service、持久卷、Sites 配置或旧数据，也不得把其历史健康检查当作 Cloudflare Production 成功证据。

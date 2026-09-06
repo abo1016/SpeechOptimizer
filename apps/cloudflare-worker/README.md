@@ -20,7 +20,7 @@ Worker 使用服务端的 OpenAI-compatible 音频转写接口。`OPENAI_API_KEY
 
 不开放请求体或客户端参数覆盖 endpoint、model、Bearer 鉴权、`response_format`、逐词时间戳、文件名/MIME、`Idempotency-Key`、超时和 Workflow 重试策略；这些属于服务端安全与响应契约，改变它们应先实现并验证独立 provider adapter。
 
-Local、Preview、Production 的 `wrangler.jsonc` 命名环境都会显式声明 URL/model；当前值均为官方兼容默认值。Local 的默认执行链通常由 Mock 后端覆盖，不代表真实 OpenAI Secret 已配置；真实 Preview/Production 流程必须在部署前单独写入对应 Worker Secret。
+Local、Preview、Production 的 `wrangler.jsonc` 命名环境都会显式声明 URL/model：Local 与 Production 当前为官方兼容默认值，Preview 当前为 owner 选定的 AIHubMix 完整 endpoint 与 `whisper-1`。这不是 AIHubMix 已通过真实转写验收的声明；其 multipart/逐词响应兼容性必须由 Preview E2E 证明。Local 的默认执行链通常由 Mock 后端覆盖，不代表真实 OpenAI Secret 已配置；真实 Preview/Production 流程必须分别保有对应 Worker Secret。
 
 ## 本地验证
 

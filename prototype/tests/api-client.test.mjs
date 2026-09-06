@@ -20,6 +20,12 @@ test("sends JSON with credentials and preserves custom idempotency headers", asy
   assert.equal(request.init.headers["idempotency-key"], "test-key-123");
 });
 
+test("accepts raw successful JSON used by the public health endpoint", async () => {
+  const health = { mode: "cloudflare", authMode: "production", turnstileSiteKey: "site-key" };
+  const client = createApiClient({ fetchImpl: async () => jsonResponse(health) });
+  assert.deepEqual(await client.get("/health"), health);
+});
+
 test("uploads audio as an octet stream without serializing the Blob", async () => {
   const blob = new Blob(["audio"], { type: "audio/webm" });
   let request;

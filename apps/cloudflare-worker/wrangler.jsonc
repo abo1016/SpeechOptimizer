@@ -116,9 +116,9 @@
         "MAX_AUDIO_DURATION_MS": "300000",
         "ANONYMOUS_MAX_AUDIO_DURATION_MS": "60000",
         "FREE_TIER_GUARD_LEVEL": "0",
-        // Preview 使用已核验支持 WebM、verbose_json 与逐词时间戳的 AIHubMix 完整 POST endpoint；API key 仅存 Worker Secret。
+        // Preview 指向 owner 选定的 AIHubMix 完整 POST endpoint；WebM、verbose_json 与逐词时间戳兼容性必须由真实 Preview E2E 验证，API key 仅存 Worker Secret。
         "OPENAI_STT_URL": "https://aihubmix.com/v1/audio/transcriptions",
-        // AIHubMix 明确支持 whisper-1；该值进入 multipart 的 model，变更模型前必须重新完成真实 Preview E2E。
+        // 该值进入 multipart 的 model；AIHubMix 对 whisper-1 的真实兼容性与变更模型后的行为均须重新完成 Preview E2E。
         "OPENAI_STT_MODEL": "whisper-1",
         // 此公开 key 由 /health 返回给前端渲染；验证密钥必须保存在 Worker Secret。
         "TURNSTILE_SITE_KEY": "0x4AAAAAAEovEhmSiSUpQ9BN"

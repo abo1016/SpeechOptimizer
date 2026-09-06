@@ -38,7 +38,11 @@ export function createApiClient(options = {}) {
       durationMs: Math.round(performance.now() - startedAt),
     });
     if (!response.ok) throw toApiError(response.status, payload);
-    return payload?.data;
+    // 业务 API 使用 { data } 包装，而公开 /health 保持顶层 JSON；两种成功响应都应可消费。
+    if (payload && typeof payload === "object" && Object.prototype.hasOwnProperty.call(payload, "data")) {
+      return payload.data;
+    }
+    return payload;
   }
 
   return {
