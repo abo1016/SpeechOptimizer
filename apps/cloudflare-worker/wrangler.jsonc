@@ -128,9 +128,7 @@
     },
     "production": {
       "name": "speechoptimizer-web",
-      "routes": [
-        { "pattern": "speak-confidently.top", "custom_domain": true }
-      ],
+      "workers_dev": true,
       "d1_databases": [
         { "binding": "DB", "database_name": "speechoptimizer-production",
           "database_id": "d92dd680-b8e2-4681-b904-12a888780198", "migrations_dir": "migrations" }
