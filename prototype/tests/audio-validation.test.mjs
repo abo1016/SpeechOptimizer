@@ -5,7 +5,9 @@ import { ACCOUNT_MAX_RECORDING_SECONDS, ANONYMOUS_MAX_RECORDING_SECONDS, MAX_FIL
 
 test("只接受 WebM/Opus，MIME 缺失时仅允许 webm 扩展名", () => {
   assert.deepEqual(validateAudioFile({ name: "take.WEBM", type: "", size: 1024 }), { valid: true });
+  assert.deepEqual(validateAudioFile({ name: "take.webm", type: "video/webm", size: 1024 }), { valid: true });
   assert.equal(validateAudioFile({ name: "take.M4A", type: "", size: 1024 }).reason, "unsupported_type");
+  assert.equal(validateAudioFile({ name: "take.txt", type: "video/webm", size: 1024 }).reason, "unsupported_type");
 });
 
 test("rejects unsupported formats with an actionable message", () => {

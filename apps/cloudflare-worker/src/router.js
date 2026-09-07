@@ -74,7 +74,9 @@ async function requireAdmin(request, env, repository) {
   const identity = await resolveIdentity(request, env, repository);
   if (!identity?.user) throw new WorkerError("AUTHENTICATION_REQUIRED", "管理员操作需要登录账户", 401);
   const admin = identity.user;
-  if (admin.role !== "admin") throw new WorkerError("FORBIDDEN", "需要管理员权限", 403);
+  const normalizedEmail = String(admin.email ?? "").trim().toLowerCase();
+  const configuredAdmin = normalizedEmail && runtimeConfig(env).adminAccountEmails.has(normalizedEmail);
+  if (admin.role !== "admin" && !configuredAdmin) throw new WorkerError("FORBIDDEN", "需要管理员权限", 403);
   return admin;
 }
 
@@ -83,7 +85,7 @@ async function routeAnalyses(request, url, env, repository, cors) {
   if (!identity) throw new WorkerError("AUTHENTICATION_REQUIRED", "需要先建立会话", 401);
   const owner = identity.actor;
   if (request.method === "POST" && url.pathname === "/api/v1/analyses") {
-    const created = await createAnalysis(request, await readJson(request), owner, env, repository);
+    const created = await createAnalysis(request, await readJson(request), owner, env, repository, identity.user?.email);
     return dataResponse(created, created.duplicate ? 200 : 202, cors);
   }
   if (request.method === "GET" && url.pathname === "/api/v1/analyses") {

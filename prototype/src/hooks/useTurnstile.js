@@ -9,7 +9,12 @@ export function useTurnstile({ enabled, siteKey, onConfigurationError }) {
   useEffect(() => {
     // 关闭弹窗、切换账户或重建 widget 时立即丢弃旧 token；Turnstile token 不能跨一次提交复用。
     setToken("");
-    if (!enabled) return undefined;
+    if (!enabled) {
+      // Bootstrap 完成后如果当前用户无需 Turnstile，要同步清掉早期配置态留下的提示，
+      // 避免已登录用户仍看到“未配置人机验证”的陈旧错误。
+      onConfigurationError("");
+      return undefined;
+    }
     if (!siteKey) {
       onConfigurationError("Human verification is not configured for this deployment.");
       return undefined;
@@ -32,6 +37,9 @@ function mountTurnstile(containerRef, widgetIdRef, siteKey, setToken, onConfigur
     try {
       widgetIdRef.current = window.turnstile.render(containerRef.current, {
         sitekey: siteKey,
+        // 保留服务端 Turnstile 校验，但正常访问不常驻显示验证控件；
+        // 仅当 Cloudflare 判定需要用户交互时才展示 challenge，降低对录音与登录流程的打扰。
+        appearance: "interaction-only",
         callback: setToken,
         "expired-callback": () => setToken(""),
         "error-callback": () => setToken(""),

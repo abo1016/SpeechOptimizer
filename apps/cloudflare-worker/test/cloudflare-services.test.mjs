@@ -49,6 +49,23 @@ test("匿名幂等重放在 Turnstile 和 IP 限流之前返回已提交任务",
   assert.deepEqual(result, { analysis, duplicate: true });
 });
 
+test("Preview 测试邮箱可免除账户与全局分析次数配额", async () => {
+  const request = new Request("https://example.test/api/v1/analyses", { method: "POST",
+    headers: { "idempotency-key": "quota-exempt-account-key" } });
+  let quotaLimits;
+  const repository = {
+    async findIdempotentAnalysis() { return null; },
+    async createAnalysis(input) {
+      quotaLimits = input.quotaLimits;
+      return { analysis: { id: "ana_exempt", owner: input.owner, status: "created", attempt: 0 }, duplicate: false };
+    },
+  };
+  await createAnalysis(request, { retainAudio: false }, { type: "account", id: "usr_test" }, {
+    APP_ENV: "preview", QUOTA_EXEMPT_ACCOUNT_EMAILS: "other@example.com, bb382978203@gmail.com",
+  }, repository, "BB382978203@gmail.com");
+  assert.deepEqual(quotaLimits, []);
+});
+
 test("分析列表游标保留 created_at 与 id，避免同秒数据跨页遗漏", () => {
   const cursor = encodeAnalysisCursor({ createdAt: "2026-09-05T00:00:00.000Z", id: "ana_150" });
   assert.deepEqual(decodeAnalysisCursor(cursor), { createdAt: "2026-09-05T00:00:00.000Z", id: "ana_150" });
@@ -82,6 +99,35 @@ test("Supabase signed upload URL 只授权单对象且不暴露 server secret", 
   assert.deepEqual(JSON.parse(Buffer.from(result.headers["x-metadata"], "base64").toString()), { sha256: checksum });
   assert.equal(new Headers(calls[0].init.headers).get("apikey"), env.SUPABASE_SECRET_KEY);
   assert.equal(new Headers(calls[0].init.headers).get("authorization"), null);
+});
+
+test("Supabase 调用注入 fetch 时不绑定 Storage 实例 receiver", async () => {
+  let receiver;
+  const fetchImpl = function () {
+    receiver = this;
+    return Response.json({ url: "/object/upload/sign/bucket/audio/account-u/a/file.webm?token=signed-token" });
+  };
+  const storage = new SupabaseAudioStorage({ SUPABASE_URL: "https://project-ref.supabase.co",
+    SUPABASE_STORAGE_BUCKET: "bucket", SUPABASE_SECRET_KEY: "sb_secret_test" }, fetchImpl);
+  await storage.createUploadUrl("audio/account-u/a/file.webm", "audio/webm", "a".repeat(64));
+  assert.equal(receiver, undefined);
+});
+
+test("Supabase signed upload 网络异常稳定映射为 STORAGE_PROVIDER_ERROR", async () => {
+  const storage = new SupabaseAudioStorage({ SUPABASE_URL: "https://project-ref.supabase.co",
+    SUPABASE_STORAGE_BUCKET: "bucket", SUPABASE_SECRET_KEY: "sb_secret_test" }, async () => {
+    throw new TypeError("network failed");
+  });
+  await assert.rejects(() => storage.createUploadUrl("audio/account-u/a/file.webm", "audio/webm", "a".repeat(64)),
+    { code: "STORAGE_PROVIDER_ERROR", status: 502 });
+});
+
+test("Supabase signed upload 非 JSON 成功响应稳定映射为 STORAGE_PROVIDER_ERROR", async () => {
+  const storage = new SupabaseAudioStorage({ SUPABASE_URL: "https://project-ref.supabase.co",
+    SUPABASE_STORAGE_BUCKET: "bucket", SUPABASE_SECRET_KEY: "sb_secret_test" }, async () =>
+    new Response("not-json", { status: 200, headers: { "content-type": "text/plain" } }));
+  await assert.rejects(() => storage.createUploadUrl("audio/account-u/a/file.webm", "audio/webm", "a".repeat(64)),
+    { code: "STORAGE_PROVIDER_ERROR", status: 502 });
 });
 
 test("同一 analysis 的并发重复 audio-upload 复用唯一对象 key", async () => {

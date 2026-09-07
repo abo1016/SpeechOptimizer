@@ -1,0 +1,16 @@
+{
+  "rules": [
+    {
+      "allowed": {
+        "origins": [
+          "https://speechoptimizer-web-preview.bb382978203.workers.dev",
+          "https://speak-confidently.top"
+        ],
+        "methods": ["PUT"],
+        "headers": ["Content-Type", "x-amz-meta-sha256"]
+      },
+      "exposeHeaders": ["ETag"],
+      "maxAgeSeconds": 3600
+    }
+  ]
+}

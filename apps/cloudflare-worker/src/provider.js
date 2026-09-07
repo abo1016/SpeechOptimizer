@@ -25,7 +25,8 @@ export async function requestOpenAiTranscription(env, analysis, audio, fetchImpl
       await multipart.cancel(`OpenAI returned ${response.status}`);
       const retryable = response.status === 429 || response.status >= 500;
       const error = providerError(retryable ? "STT_UNAVAILABLE" : "STT_REQUEST_REJECTED",
-        "STT 服务拒绝处理音频", retryable, response.status === 401 || response.status === 403 ? 502 : 422);
+        "STT 服务拒绝处理音频", retryable, response.status === 401 || response.status === 403 ? 502 : 422,
+        response.status);
       logProviderFailure(error, response.status);
       throw error;
     }
@@ -33,7 +34,7 @@ export async function requestOpenAiTranscription(env, analysis, audio, fetchImpl
     try {
       return await response.json();
     } catch {
-      const error = providerError("STT_RESPONSE_INVALID", "STT 服务返回无效结果", true, 502);
+      const error = providerError("STT_RESPONSE_INVALID", "STT 服务返回无效结果", true, 502, response.status);
       logProviderFailure(error, response.status);
       throw error;
     }
@@ -174,8 +175,8 @@ function isNormalizedProviderError(error) {
 function streamError(code, message, status) { return Object.assign(new Error(message), { code, retryable: false, status }); }
 
 /** 将底层异常转换为 D1 与前端均可依赖的稳定错误码，同时保留 Workflow 重试判断。 */
-function providerError(code, message, retryable, status) {
-  return Object.assign(new Error(message), { code, retryable, status });
+function providerError(code, message, retryable, status, providerStatus = /** @type {number | null} */ (null)) {
+  return Object.assign(new Error(message), { code, retryable, status, providerStatus });
 }
 
 /** Provider 错误只保留安全运维字段；错误 message 和 response body 都可能包含外部敏感信息。 */

@@ -18,12 +18,12 @@
   padding: 0;
   display: inline-flex;
   align-items: center;
+  gap: 10px;
   border: 0;
   background: transparent;
+  color: var(--ink);
   cursor: pointer;
 }
-
-.brand img { width: 205px; height: auto; display: block; }
 
 .brand-mark {
   width: 36px;
@@ -33,6 +33,13 @@
   border-radius: 7px;
   background: var(--blue);
   color: white;
+}
+
+.brand-name {
+  font-size: 19px;
+  font-weight: 760;
+  letter-spacing: -0.025em;
+  white-space: nowrap;
 }
 
 .primary-nav { height: 100%; display: flex; align-items: stretch; gap: 18px; }

@@ -5,6 +5,50 @@ import { logEvent } from "../src/logger.js";
 import { requestOpenAiTranscription } from "../src/provider.js";
 import { SupabaseAudioStorage } from "../src/storage/supabase.js";
 import { dispatchWorkflow } from "../src/workflow-dispatch.js";
+import { decodeWorkflowError, encodeWorkflowError } from "../src/workflow-error.js";
+import { completeAnalysis } from "../src/workflow-completion.js";
+
+
+
+test("Workflow 结果落盘在清理已成功但 D1 changes 误报冲突时按最终态收口", async () => {
+  let current = { id: "ana_complete", owner: { type: "account", id: "usr_1" }, status: "analyzing",
+    retainAudio: false, audio: { objectKey: "audio/account-usr_1/ana_complete/speech.webm" }, result: null };
+  const deleted = [];
+  let transitions = 0;
+  const repository = {
+    async getAnalysis() { return current; },
+    async transition(_id, _from, target, patch, eventType) {
+      transitions += 1;
+      if (eventType === "analysis.completed") {
+        current = { ...current, status: target, result: { report: true } };
+        return current;
+      }
+      current = { ...current, status: target, audio: null };
+      throw Object.assign(new Error("D1 changes metadata reported conflict"), { code: "STATE_CONFLICT" });
+    },
+  };
+  const result = await completeAnalysis({}, repository, current.id, { report: true }, () => ({
+    async deleteObject(key) { deleted.push(key); },
+  }));
+  assert.equal(result.status, "completed");
+  assert.equal(result.audio, null);
+  assert.equal(transitions, 2);
+  assert.deepEqual(deleted, ["audio/account-usr_1/ana_complete/speech.webm"]);
+});
+
+test("Workflow persist-result 重放遇到已完成且已清理任务时直接返回最终态", async () => {
+  const current = { id: "ana_replay", owner: { type: "account", id: "usr_1" }, status: "completed",
+    retainAudio: false, audio: null, result: { report: true } };
+  let transitions = 0;
+  let deletes = 0;
+  const result = await completeAnalysis({}, {
+    async getAnalysis() { return current; },
+    async transition() { transitions += 1; throw new Error("不应再次迁移"); },
+  }, current.id, current.result, () => ({ async deleteObject() { deletes += 1; } }));
+  assert.strictEqual(result, current);
+  assert.equal(transitions, 0);
+  assert.equal(deletes, 0);
+});
 
 test("Cloudflare 明确的已有实例冲突可以确认 Queue 消息", async () => {
   const workflow = { async create() { throw Object.assign(new Error("Workflow instance ana_1 already exists"), { status: 409 }); } };
@@ -21,9 +65,30 @@ test("STT 请求传递稳定幂等键并映射可重试 Provider 故障", async 
   await assert.rejects(() => requestOpenAiTranscription({ OPENAI_API_KEY: "sk-test-secret" },
     analysis("ana_1", 3), audioStream([new Uint8Array([1, 2, 3])]),
     async (_url, init) => { calls.push(init); await consume(init.body); return new Response("provider body must not be logged", { status: 503 }); }),
-  { code: "STT_UNAVAILABLE", retryable: true });
+  { code: "STT_UNAVAILABLE", retryable: true, providerStatus: 503 });
   assert.equal(new Headers(calls[0].headers).get("idempotency-key"), "speechoptimizer-stt-ana_1");
   assert.ok(calls[0].signal instanceof AbortSignal);
+});
+
+test("STT Provider 4xx 保留不可重试语义和安全 HTTP status", async () => {
+  await assert.rejects(() => requestOpenAiTranscription({ OPENAI_API_KEY: "sk-test-secret" },
+    analysis("ana_rejected", 3), audioStream([new Uint8Array([1, 2, 3])]),
+    async (_url, init) => { await consume(init.body); return new Response("provider details", { status: 400 }); }),
+  { code: "STT_REQUEST_REJECTED", retryable: false, providerStatus: 400 });
+});
+
+test("Workflow 错误编码只跨边界保留稳定错误码、重试性与 Provider status", () => {
+  const encoded = encodeWorkflowError(Object.assign(new Error("provider body secret"), {
+    code: "STT_REQUEST_REJECTED", retryable: false, providerStatus: 400,
+  }));
+  assert.equal(encoded, "SO_WORKFLOW_ERROR:STT_REQUEST_REJECTED:0:400");
+  assert.equal(encoded.includes("provider body secret"), false);
+  assert.deepEqual(decodeWorkflowError(new Error(encoded)), {
+    code: "STT_REQUEST_REJECTED", retryable: false, providerStatus: 400,
+  });
+  assert.deepEqual(decodeWorkflowError(new Error(`NonRetryableError: ${encoded}`)), {
+    code: "STT_REQUEST_REJECTED", retryable: false, providerStatus: 400,
+  });
 });
 
 test("STT 默认使用官方 endpoint 与 whisper-1，API key 只进入 Bearer", async () => {

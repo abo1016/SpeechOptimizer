@@ -23,6 +23,8 @@ export function runtimeConfig(env) {
     anonymousDailyLimit: positiveInt(env.ANONYMOUS_DAILY_LIMIT, 1),
     accountDailyLimit: positiveInt(env.ACCOUNT_DAILY_LIMIT, 3),
     globalDailyLimit: positiveInt(env.GLOBAL_DAILY_LIMIT, 50),
+    quotaExemptAccountEmails: normalizedEmailSet(env.QUOTA_EXEMPT_ACCOUNT_EMAILS, "QUOTA_EXEMPT_ACCOUNT_EMAILS"),
+    adminAccountEmails: normalizedEmailSet(env.ADMIN_ACCOUNT_EMAILS, "ADMIN_ACCOUNT_EMAILS"),
     freeTierGuardLevel: guardLevel(env.FREE_TIER_GUARD_LEVEL),
     paymentsEnabled: String(env.PAYMENTS_ENABLED ?? "false") === "true",
   };
@@ -78,6 +80,16 @@ function positiveInt(value, fallback) {
   const result = value === undefined ? fallback : Number(value);
   if (!Number.isInteger(result) || result <= 0) throw new WorkerError("INVALID_CONFIG", "运行时数值配置无效", 500);
   return result;
+}
+
+function normalizedEmailSet(value, name) {
+  if (value === undefined || value === null || value === "") return new Set();
+  if (typeof value !== "string") throw new WorkerError("INVALID_CONFIG", `${name} 无效`, 500);
+  const emails = value.split(",").map((item) => item.trim().toLowerCase()).filter(Boolean);
+  if (emails.some((email) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
+    throw new WorkerError("INVALID_CONFIG", `${name} 无效`, 500);
+  }
+  return new Set(emails);
 }
 
 /** URL 必须是无凭据、无查询参数的 HTTPS 完整 endpoint；原始配置值不会进入异常消息或日志。 */

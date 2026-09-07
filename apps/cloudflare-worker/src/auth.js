@@ -95,7 +95,7 @@ export function clearGoogleOAuthStateCookie() {
 export async function currentSession(request, env, repository) {
   const identity = await resolveIdentity(request, env, repository);
   if (!identity) throw new WorkerError("AUTHENTICATION_REQUIRED", "需要先建立会话", 401);
-  return { identity: identity.actor, user: identity.user ? publicUser(identity.user) : null };
+  return { identity: identity.actor, user: identity.user ? publicUser(identity.user, env) : null };
 }
 
 export async function logout(request, env, repository) {
@@ -119,7 +119,7 @@ async function createLogin(user, env, repository) {
   const token = randomToken();
   await repository.createSession({ tokenHash: await sha256Hex(token), userId: user.id,
     expiresAt: futureIso(runtimeConfig(env).sessionTtlSeconds) });
-  return { data: { user: publicUser(user) }, headers: { "set-cookie": cookie("so_session", token, runtimeConfig(env).sessionTtlSeconds, true) } };
+  return { data: { user: publicUser(user, env) }, headers: { "set-cookie": cookie("so_session", token, runtimeConfig(env).sessionTtlSeconds, true) } };
 }
 
 /**
@@ -150,8 +150,8 @@ async function sendMagicLink(email, token, redirectUri, env) {
   link.searchParams.set("token", token);
   const response = await fetch("https://api.resend.com/emails", { method: "POST",
     headers: { authorization: `Bearer ${requiredSecret(env, "RESEND_API_KEY")}`, "content-type": "application/json" },
-    body: JSON.stringify({ from: requiredSecret(env, "MAGIC_LINK_FROM"), to: [email], subject: "Your SpeechOptimizer sign-in link",
-      text: `Open this link to sign in: ${link}` }) });
+    body: JSON.stringify({ from: requiredSecret(env, "MAGIC_LINK_FROM"), to: [email], subject: "Your Speak Confidently sign-in link",
+      text: `Open this link to sign in to Speak Confidently: ${link}` }) });
   if (!response.ok) throw new WorkerError("MAIL_DELIVERY_FAILED", "登录邮件发送失败", 502);
 }
 
@@ -211,5 +211,9 @@ function normalizeEmail(email) {
 }
 
 function futureIso(seconds) { return new Date(Date.now() + seconds * 1000).toISOString(); }
-function publicUser(user) { return { id: user.id, email: user.email ?? user.email_normalized, role: user.role,
+function publicUser(user, env) {
+  const email = user.email ?? user.email_normalized;
+  const normalizedEmail = String(email ?? "").trim().toLowerCase();
+  const role = user.role === "admin" || (normalizedEmail && runtimeConfig(env).adminAccountEmails.has(normalizedEmail)) ? "admin" : user.role;
+  return { id: user.id, email, role,
   status: user.status, provider: user.provider, retainAudio: Boolean(user.retainAudio ?? user.retain_audio) }; }

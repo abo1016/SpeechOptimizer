@@ -224,6 +224,24 @@ test("管理员失败分析接口拒绝未登录与普通账户", async () => {
   assert.equal((await forbidden.json()).error.code, "FORBIDDEN");
 });
 
+test("Preview 配置的管理员邮箱可访问失败分析接口", async () => {
+  const userSession = {
+    user_id: "usr_admin_email", email_normalized: "bb382978203@gmail.com", role: "user", status: "active",
+    provider: "google", provider_subject: "google-admin", retain_audio: 0, expires_at: "2099-01-01T00:00:00.000Z",
+  };
+  const database = {
+    prepare(sql) {
+      if (sql.includes("FROM sessions")) return { bind() { return { async first() { return userSession; } }; } };
+      if (sql.includes("FROM analyses")) return { bind() { return { async all() { return { results: [] }; } }; } };
+      throw new Error(`unexpected SQL: ${sql}`);
+    },
+  };
+  const response = await routeRequest(new Request("https://example.test/api/v1/admin/analyses?status=failed", {
+    headers: { cookie: "so_session=test-session" },
+  }), { ...createEnv(), APP_ENV: "preview", ADMIN_ACCOUNT_EMAILS: "BB382978203@gmail.com", COOKIE_SECRET: "test-cookie-secret", DB: database });
+  assert.equal(response.status, 200);
+});
+
 test("非 API 请求交给 Static Assets binding", async () => {
   const response = await routeRequest(
     new Request("https://example.test/dashboard"),

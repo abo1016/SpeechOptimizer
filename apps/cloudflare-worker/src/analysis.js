@@ -8,7 +8,7 @@ import { purgeDisabledAccount } from "./cleanup.js";
 import { enqueueUploadedAnalysis } from "./queue-dispatch.js";
 
 /** 创建分析任务并按身份应用每日免费额度；幂等重复请求不会重复占用额度。 */
-export async function createAnalysis(request, input, owner, env, repository) {
+export async function createAnalysis(request, input, owner, env, repository, accountEmail = null) {
   const idempotencyKey = request.headers.get("idempotency-key");
   invariant(idempotencyKey && idempotencyKey.length >= 8, "MISSING_IDEMPOTENCY_KEY", "缺少有效 Idempotency-Key", 400);
   const retainAudio = owner.type === "account" && input.retainAudio === true;
@@ -26,7 +26,7 @@ export async function createAnalysis(request, input, owner, env, repository) {
     await enforceIpRateLimit("analysis-anonymous", request, repository, 10);
   }
   const created = await repository.createAnalysis({ owner, keyHash, fingerprint, retainAudio,
-    quotaLimits: dailyQuotaLimits(owner, runtimeConfig(env)) });
+    quotaLimits: dailyQuotaLimits(owner, runtimeConfig(env), accountEmail) });
   log(created.duplicate ? "analysis.idempotent_replay" : "analysis.created", created.analysis);
   return created;
 }
@@ -180,7 +180,9 @@ export async function deleteAccount(identity, env, repository) {
   }
 }
 
-function dailyQuotaLimits(owner, config) {
+function dailyQuotaLimits(owner, config, accountEmail = null) {
+  const normalizedEmail = String(accountEmail ?? "").trim().toLowerCase();
+  if (owner.type === "account" && normalizedEmail && config.quotaExemptAccountEmails.has(normalizedEmail)) return [];
   const day = new Date().toISOString().slice(0, 10);
   const limit = owner.type === "anonymous" ? config.anonymousDailyLimit : config.accountDailyLimit;
   return [{ metric: "analysis-global", periodKey: day, limit: config.globalDailyLimit },

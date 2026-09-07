@@ -1,4 +1,4 @@
-import { Clock3, LogOut, Menu, UserRound, X } from "lucide-react";
+import { AudioLines, Clock3, LogOut, Menu, UserRound, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { resources } from "../api/resources.js";
 import { accountNavigation, primaryNavigation } from "../data/productData.js";
@@ -8,8 +8,9 @@ import { AuthDialog } from "./AuthDialog.jsx";
 
 function Brand({ navigate }) {
   return (
-    <button className="brand" onClick={() => navigate("/")} aria-label="SpeechOptimizer home">
-      <img src="/assets/speechoptimizer-lockup.png" alt="SpeechOptimizer" />
+    <button className="brand" onClick={() => navigate("/")} aria-label="Speak Confidently home">
+      <span className="brand-mark" aria-hidden="true"><AudioLines size={21} /></span>
+      <span className="brand-name">Speak Confidently</span>
     </button>
   );
 }
@@ -96,7 +97,7 @@ export function AppShell({ activePath, authOpen, children, navigate, onAuthChang
       {(bootError || balanceError) && <aside role="alert" className="form-error"><p>{bootError ? `Service connection failed: ${bootError}` : `Billing data could not load: ${balanceError}`}</p>{bootError && <button className="text-button" disabled={booting} onClick={() => retryBootstrap().catch(() => undefined)}>{booting ? "Retrying connection" : "Retry connection"}</button>}</aside>}
       <main>{children}</main>
       <footer className="site-footer">
-        <span>SpeechOptimizer</span>
+        <span>Speak Confidently</span>
         <nav aria-label="Legal links">
           <button onClick={() => go("/privacy")}>Privacy</button>
           <button onClick={() => go("/terms")}>Terms</button>

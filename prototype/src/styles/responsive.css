@@ -45,8 +45,9 @@
 @media (max-width: 560px) {
   body { font-size: 16px; }
   h1 { font-size: 28px; }
-  .brand img { width: 168px; }
+  .brand { gap: 8px; }
   .brand-mark { width: 34px; height: 34px; }
+  .brand-name { font-size: 17px; }
   .recorder-workspace { min-height: 610px; padding: 32px 20px; }
   .workspace-copy h1 { font-size: 28px; }
   .record-stage { min-height: 330px; padding-inline: 0; }

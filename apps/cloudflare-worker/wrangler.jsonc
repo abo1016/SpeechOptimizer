@@ -82,7 +82,7 @@
         "ANONYMOUS_MAX_AUDIO_DURATION_MS": "60000",
         "FREE_TIER_GUARD_LEVEL": "0",
         // 这是完整的 POST endpoint；中转环境只能替换为经审查的 HTTPS 地址，不能携带凭据或 query/fragment。
-        "OPENAI_STT_URL": "https://api.openai.com/v1/audio/transcriptions",
+        "OPENAI_STT_URL": "https://aihubmix.com/v1/audio/transcriptions",
         // 该字段进入 multipart 的 model；中转别名必须兼容 verbose_json 与逐词时间戳响应。
         "OPENAI_STT_MODEL": "whisper-1",
         "COOKIE_SECRET": "local-development-cookie-secret-only"
@@ -116,6 +116,8 @@
         "MAX_AUDIO_DURATION_MS": "300000",
         "ANONYMOUS_MAX_AUDIO_DURATION_MS": "60000",
         "FREE_TIER_GUARD_LEVEL": "0",
+        "QUOTA_EXEMPT_ACCOUNT_EMAILS": "bb382978203@gmail.com",
+        "ADMIN_ACCOUNT_EMAILS": "bb382978203@gmail.com",
         // Preview 指向 owner 选定的 AIHubMix 完整 POST endpoint；WebM、verbose_json 与逐词时间戳兼容性必须由真实 Preview E2E 验证，API key 仅存 Worker Secret。
         "OPENAI_STT_URL": "https://aihubmix.com/v1/audio/transcriptions",
         // 该值进入 multipart 的 model；AIHubMix 对 whisper-1 的真实兼容性与变更模型后的行为均须重新完成 Preview E2E。
@@ -143,7 +145,7 @@
         "APP_VERSION": "production",
         "RESOURCE_NAMESPACE": "speechoptimizer-production",
         "STORAGE_PROVIDER": "supabase",
-        "ALLOWED_ORIGINS": "https://speak-confidently.top",
+        "ALLOWED_ORIGINS": "https://speak-confidently.top,https://speechoptimizer-web.bb382978203.workers.dev",
         "SUPABASE_URL": "https://qnmxxvnypmfzwclyyfhr.supabase.co",
         "SUPABASE_STORAGE_BUCKET": "speechoptimizer-production-audio",
         "STORAGE_LIMIT_BYTES": "838860800",
@@ -152,8 +154,11 @@
         "MAX_AUDIO_DURATION_MS": "300000",
         "ANONYMOUS_MAX_AUDIO_DURATION_MS": "60000",
         "FREE_TIER_GUARD_LEVEL": "0",
+        // Production 显式保持测试白名单为空，既对齐 generated Env 契约，也避免测试账号获得免限额或管理员权限。
+        "QUOTA_EXEMPT_ACCOUNT_EMAILS": "",
+        "ADMIN_ACCOUNT_EMAILS": "",
         // 这是完整的 POST endpoint；Production 使用审查后的 HTTPS endpoint，不能携带凭据或 query/fragment。
-        "OPENAI_STT_URL": "https://api.openai.com/v1/audio/transcriptions",
+        "OPENAI_STT_URL": "https://aihubmix.com/v1/audio/transcriptions",
         // 该字段进入 multipart 的 model；中转别名必须兼容 verbose_json 与逐词时间戳响应。
         "OPENAI_STT_MODEL": "whisper-1",
         // 此 key 与 Preview 共用同一 widget；正式验证密钥必须在发布前独立存入 Worker Secret。

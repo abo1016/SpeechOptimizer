@@ -1,9 +1,12 @@
 import { WorkflowEntrypoint } from "cloudflare:workers";
+import { NonRetryableError } from "cloudflare:workflows";
 import { validateTrustedDuration } from "./config.js";
 import { D1Repository } from "./repository.js";
 import { requestOpenAiTranscription } from "./provider.js";
 import { buildReport } from "./report.js";
 import { audioStorage } from "./storage/index.js";
+import { completeAnalysis } from "./workflow-completion.js";
+import { decodeWorkflowError, encodeWorkflowError } from "./workflow-error.js";
 
 const TRANSCRIBE_STEP_OPTIONS = {
   // 单个外部调用由 AbortSignal 在 90 秒后终止；Workflow 最多再执行两次并使用指数退避。
@@ -22,13 +25,23 @@ export class SpeechAnalysisWorkflow extends WorkflowEntrypoint {
     const started = await step.do("claim-analysis", () => claim(repository, analysisId, attempt));
     if (!started) return { ignored: true, analysisId, attempt };
     try {
-      const transcription = await step.do("transcribe", TRANSCRIBE_STEP_OPTIONS, () => transcribe(this.env, analysisId));
+      const transcription = await step.do("transcribe", TRANSCRIBE_STEP_OPTIONS, async () => {
+        try {
+          return await transcribe(this.env, analysisId);
+        } catch (error) {
+          const message = encodeWorkflowError(error);
+          // Provider 4xx、配置错误与对象完整性错误不能靠重试恢复；直接终止当前 step 的重试循环。
+          if (error?.retryable === false) throw new NonRetryableError(message);
+          throw new Error(message);
+        }
+      });
       await step.do("validate-duration", () => validateTrustedDuration(this.env, transcription, started.owner.type));
       await step.do("mark-analyzing", () => repository.transition(analysisId, ["transcribing"], "analyzing", {}, "analysis.analyzing"));
       const result = await step.do("build-report", () => buildReport(transcription));
-      return await step.do("persist-result", () => complete(this.env, repository, analysisId, result));
+      return await step.do("persist-result", () => completeAnalysis(this.env, repository, analysisId, result));
     } catch (error) {
-      await step.do("persist-failure", () => failAnalysis(repository, analysisId, error));
+      const normalized = decodeWorkflowError(error) ?? error;
+      await step.do("persist-failure", () => failAnalysis(repository, analysisId, normalized));
       throw error;
     }
   }
@@ -62,21 +75,6 @@ async function transcribe(env, analysisId) {
   const audio = await storage.getObjectStream(analysis.audio.objectKey, analysis.audio.size);
   if (!audio) throw new Error("audio object missing");
   return requestOpenAiTranscription(env, analysis, audio);
-}
-
-async function complete(env, repository, analysisId, result) {
-  const current = await repository.getAnalysis(analysisId);
-  if (!current || current.status === "cancelled") return current;
-  const completed = await repository.transition(analysisId, ["analyzing"], "completed", {
-    result_json: JSON.stringify(result), error_code: null, error_retryable: null, failure_stage: null, failed_at: null,
-    completed_at: new Date().toISOString(),
-  }, "analysis.completed");
-  if ((completed.owner.type === "anonymous" || !completed.retainAudio) && completed.audio?.objectKey) {
-    await audioStorage(env).deleteObject(completed.audio.objectKey);
-    // 0004 的 audio_key 清空触发器会幂等释放 storage_reservations，不能再维护已废弃的 R2 计数。
-    return repository.transition(analysisId, ["completed"], "completed", { audio_key: null }, "analysis.audio_deleted");
-  }
-  return completed;
 }
 
 async function failAnalysis(repository, analysisId, error) {

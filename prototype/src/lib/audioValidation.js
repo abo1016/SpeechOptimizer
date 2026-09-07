@@ -3,12 +3,18 @@
  */
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 export const ACCEPTED_AUDIO_TYPES = ["audio/webm", "audio/webm;codecs=opus"];
+const WEBM_EXTENSION = /\.webm$/i;
 export const ANONYMOUS_MAX_RECORDING_SECONDS = 60;
 export const ACCOUNT_MAX_RECORDING_SECONDS = 5 * 60;
 
 export function validateAudioFile(file) {
   if (!file) return { valid: false, reason: "missing_file", message: "Choose an audio file to continue." };
-  const validType = ACCEPTED_AUDIO_TYPES.includes(file.type) || (/\.webm$/i.test(file.name || "") && !file.type);
+  // macOS/Chrome may label an audio-only WebM selected from Finder as video/webm.
+  // The upload path normalizes accepted .webm files to audio/webm and the Worker
+  // still performs the authoritative container/integrity checks before processing.
+  const isWebmFile = WEBM_EXTENSION.test(file.name || "");
+  const validType = ACCEPTED_AUDIO_TYPES.includes(file.type)
+    || (isWebmFile && (!file.type || file.type === "video/webm"));
   if (!validType) return { valid: false, reason: "unsupported_type", message: "Only WebM/Opus audio is supported for this beta." };
   if (file.size > MAX_FILE_BYTES) return { valid: false, reason: "file_too_large", message: "This file is larger than 10 MiB. Choose a smaller WebM/Opus file." };
   return { valid: true };

@@ -1,4 +1,4 @@
-import { invariant } from "../errors.js";
+import { WorkerError, invariant } from "../errors.js";
 import { logEvent } from "../logger.js";
 import { assertWebmMagic } from "./common.js";
 
@@ -8,7 +8,8 @@ const SIGNED_UPLOAD_TTL_SECONDS = 2 * 60 * 60;
 export class SupabaseAudioStorage {
   constructor(env, fetchImpl = fetch) {
     this.env = env;
-    this.fetch = fetchImpl;
+    // Cloudflare 的原生 fetch 不能依赖被当作实例方法调用时的 receiver；用闭包保持裸函数调用语义。
+    this.fetch = (input, init) => fetchImpl(input, init);
     this.baseUrl = normalizeUrl(required(env.SUPABASE_URL, "SUPABASE_URL"));
     this.bucket = required(env.SUPABASE_STORAGE_BUCKET, "SUPABASE_STORAGE_BUCKET");
     this.secret = required(env.SUPABASE_SECRET_KEY ?? env.SUPABASE_SERVICE_ROLE_KEY,
@@ -18,7 +19,15 @@ export class SupabaseAudioStorage {
   async createUploadUrl(key, contentType, sha256) {
     const response = await this.request(`/object/upload/sign/${encodePath(`${this.bucket}/${key}`)}`,
       { method: "POST", body: JSON.stringify({}), headers: { "content-type": "application/json" } });
-    const data = await response.json();
+    let data;
+    try {
+      data = await response.json();
+    } catch (error) {
+      logEvent("warn", "storage.supabase_response_invalid", {
+        provider: "supabase", operation: "upload_sign", errorName: error?.name ?? "Error",
+      });
+      throw new WorkerError("STORAGE_PROVIDER_ERROR", "Supabase Storage 返回无效响应", 502);
+    }
     invariant(data?.url, "STORAGE_SIGNING_FAILED", "Supabase 未返回上传授权", 502);
     const uploadUrl = data.url.startsWith("http") ? data.url : `${this.baseUrl}/storage/v1${data.url}`;
     // Supabase signed upload URL 当前固定 2 小时有效；checksum 作为对象 user metadata 一并写入。
@@ -113,7 +122,16 @@ export class SupabaseAudioStorage {
     headers.set("apikey", this.secret);
     // legacy service_role 是 JWT，可直接进入 Authorization；新 sb_secret_* 由网关通过 apikey 识别并替换角色。
     if (!this.secret.startsWith("sb_secret_")) headers.set("authorization", `Bearer ${this.secret}`);
-    const response = await this.fetch(`${this.baseUrl}/storage/v1${path}`, { ...init, headers });
+    let response;
+    try {
+      response = await this.fetch(`${this.baseUrl}/storage/v1${path}`, { ...init, headers });
+    } catch (error) {
+      // 网络/运行时异常只记录稳定阶段和异常类型；URL、对象 key、凭证和 Provider 正文都不能进入日志。
+      logEvent("warn", "storage.supabase_fetch_failed", {
+        provider: "supabase", operation: storageOperation(path), errorName: error?.name ?? "Error",
+      });
+      throw new WorkerError("STORAGE_PROVIDER_ERROR", "Supabase Storage 请求失败", 502);
+    }
     if (!response.ok && !allowedStatuses.includes(response.status)) {
       // Provider body 可能包含签名 URL、对象元数据或网关诊断，禁止读取后写入日志。
       logEvent("warn", "storage.supabase_request_failed", {

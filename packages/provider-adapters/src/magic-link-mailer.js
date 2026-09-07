@@ -82,9 +82,9 @@ function createMessage({ email, token, redirectUri }, from, now) {
   url.searchParams.set("token", token);
   const id = `magic-${now}`;
   return {
-    id, from, to: email, subject: "Sign in to SpeechOptimizer",
-    text: `Open this one-time sign-in link: ${url}`,
-    html: `<p>Open this one-time sign-in link:</p><p><a href="${escapeHtml(String(url))}">Sign in</a></p>`,
+    id, from, to: email, subject: "Sign in to Speak Confidently",
+    text: `Open this one-time link to sign in to Speak Confidently: ${url}`,
+    html: `<p>Open this one-time link to sign in to Speak Confidently:</p><p><a href="${escapeHtml(String(url))}">Sign in</a></p>`,
   };
 }
 
