@@ -6,6 +6,7 @@ import { runtimeConfig } from "./config.js";
 import { WorkerError, invariant } from "./errors.js";
 import { assertCookieMutationOrigin, corsHeaders, dataResponse, errorResponse, jsonResponse, readJson } from "./http.js";
 import { logEvent } from "./logger.js";
+import { productCatalog } from "./product-catalog.js";
 import { D1Repository } from "./repository.js";
 import { compareTakes } from "../../../packages/speech-engine/src/compare.js";
 
@@ -48,7 +49,7 @@ async function routeApi(request, url, env, cors) {
   if (path.startsWith("/api/v1/analyses")) return routeAnalyses(request, url, env, repository, cors);
   if (path === "/api/v1/privacy") return routePrivacy(request, env, repository, cors);
   if (method === "DELETE" && path === "/api/v1/account") return routeDeleteAccount(request, env, repository, cors);
-  if (path.startsWith("/api/v1/billing") || path === "/api/v1/plans") return routePayments(request, env, cors);
+  if (path.startsWith("/api/v1/billing") || path === "/api/v1/plans") return routePayments(request, env, repository, cors);
   throw new WorkerError("ROUTE_NOT_FOUND", "接口不存在", 404);
 }
 
@@ -148,17 +149,30 @@ async function routeComparison(request, env, repository, cors) {
   return dataResponse(compareTakes(before.result.report, after.result.report), 200, cors);
 }
 
-async function routePayments(request, env, cors) {
+async function routePayments(request, env, repository, cors) {
   const config = runtimeConfig(env);
   const pathname = new URL(request.url).pathname;
-  if (!config.paymentsEnabled && request.method === "GET") {
-    if (pathname === "/api/v1/plans") return dataResponse({}, 200, cors);
-    if (pathname === "/api/v1/billing/balance") return dataResponse({ minutes: 0, reports: 0, paymentsEnabled: false }, 200, cors);
-    if (new Set(["/api/v1/billing/ledger", "/api/v1/billing/orders", "/api/v1/billing/subscriptions"]).has(pathname)) {
-      return dataResponse([], 200, cors);
-    }
+  if (request.method === "GET" && pathname === "/api/v1/plans") {
+    return dataResponse(productCatalog(config), 200, cors);
   }
-  throw new WorkerError("PAYMENTS_DISABLED", "免费 Beta 暂未开放支付", 503);
+  if (request.method === "GET" && pathname === "/api/v1/billing/balance") {
+    const identity = await resolveIdentity(request, env, repository);
+    if (!identity?.user) throw new WorkerError("AUTHENTICATION_REQUIRED", "该操作需要登录账户", 401);
+    const month = new Date().toISOString().slice(0, 7);
+    const limit = config.accountMonthlyLimit;
+    const used = await repository.quotaValue(`analysis-account:${identity.actor.id}`, month);
+    return dataResponse({
+      currentPlan: "free_monthly",
+      freeQuota: { type: "monthly_analysis", limit, used, remaining: Math.max(0, limit - used) },
+      entitlements: { minutes: 0, reports: 0 },
+      minutes: 0, reports: 0, paymentsEnabled: config.paymentsEnabled,
+    }, 200, cors);
+  }
+  if (!config.paymentsEnabled && request.method === "GET"
+    && new Set(["/api/v1/billing/ledger", "/api/v1/billing/orders", "/api/v1/billing/subscriptions"]).has(pathname)) {
+    return dataResponse([], 200, cors);
+  }
+  throw new WorkerError("PAYMENTS_DISABLED", "付费能力暂未开放", 503);
 }
 
 async function googleStart(request, env, repository, cors) {

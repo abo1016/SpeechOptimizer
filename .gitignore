@@ -30,3 +30,10 @@ dist/
 # 本地包管理器调试日志可能包含机器路径，仅保留可复现的锁文件。
 npm-debug.log*
 pnpm-debug.log*
+
+# 本机生产凭据只用于受控部署，禁止进入 Git。
+production-secrets.env
+
+# 本地代码图索引与 Codex Native 工具测试产物不进入发布提交。
+.codegraph/
+.codex-native-test/

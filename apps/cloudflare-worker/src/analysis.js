@@ -26,7 +26,7 @@ export async function createAnalysis(request, input, owner, env, repository, acc
     await enforceIpRateLimit("analysis-anonymous", request, repository, 10);
   }
   const created = await repository.createAnalysis({ owner, keyHash, fingerprint, retainAudio,
-    quotaLimits: dailyQuotaLimits(owner, runtimeConfig(env), accountEmail) });
+    quotaLimits: analysisQuotaLimits(owner, runtimeConfig(env), accountEmail) });
   log(created.duplicate ? "analysis.idempotent_replay" : "analysis.created", created.analysis);
   return created;
 }
@@ -180,13 +180,16 @@ export async function deleteAccount(identity, env, repository) {
   }
 }
 
-function dailyQuotaLimits(owner, config, accountEmail = null) {
+function analysisQuotaLimits(owner, config, accountEmail = null) {
   const normalizedEmail = String(accountEmail ?? "").trim().toLowerCase();
   if (owner.type === "account" && normalizedEmail && config.quotaExemptAccountEmails.has(normalizedEmail)) return [];
   const day = new Date().toISOString().slice(0, 10);
-  const limit = owner.type === "anonymous" ? config.anonymousDailyLimit : config.accountDailyLimit;
-  return [{ metric: "analysis-global", periodKey: day, limit: config.globalDailyLimit },
-    { metric: `analysis-${owner.type}:${owner.id}`, periodKey: day, limit }];
+  const globalLimit = { metric: "analysis-global", periodKey: day, limit: config.globalDailyLimit };
+  if (owner.type === "anonymous") {
+    return [globalLimit, { metric: `analysis-anonymous:${owner.id}`, periodKey: day, limit: config.anonymousDailyLimit }];
+  }
+  const month = day.slice(0, 7);
+  return [globalLimit, { metric: `analysis-account:${owner.id}`, periodKey: month, limit: config.accountMonthlyLimit }];
 }
 
 async function deleteStoredAudio(env, repository, analysisId, audio) {

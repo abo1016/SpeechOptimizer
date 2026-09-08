@@ -102,6 +102,22 @@
 .avatar { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; background: var(--ink); color: white; font-size: 13px; }
 .mobile-menu { display: none; }
 
+.shell-alert {
+  width: min(100% - 64px, var(--content));
+  margin: 16px auto 0;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.shell-alert p { margin: 0; }
+.shell-alert .text-button { flex: 0 0 auto; }
+
 .site-footer {
   margin-top: auto;
   padding: 24px max(32px, calc((100vw - var(--content)) / 2));

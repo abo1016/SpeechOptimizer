@@ -21,7 +21,7 @@ export function runtimeConfig(env) {
     sessionTtlSeconds: positiveInt(env.SESSION_TTL_SECONDS, 30 * 24 * 60 * 60),
     magicLinkTtlSeconds: positiveInt(env.MAGIC_LINK_TTL_SECONDS, 15 * 60),
     anonymousDailyLimit: positiveInt(env.ANONYMOUS_DAILY_LIMIT, 1),
-    accountDailyLimit: positiveInt(env.ACCOUNT_DAILY_LIMIT, 3),
+    accountMonthlyLimit: positiveInt(env.ACCOUNT_MONTHLY_LIMIT, 3),
     globalDailyLimit: positiveInt(env.GLOBAL_DAILY_LIMIT, 50),
     quotaExemptAccountEmails: normalizedEmailSet(env.QUOTA_EXEMPT_ACCOUNT_EMAILS, "QUOTA_EXEMPT_ACCOUNT_EMAILS"),
     adminAccountEmails: normalizedEmailSet(env.ADMIN_ACCOUNT_EMAILS, "ADMIN_ACCOUNT_EMAILS"),

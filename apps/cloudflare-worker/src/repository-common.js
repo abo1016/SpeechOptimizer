@@ -24,7 +24,7 @@ export function changes(result) { return Number(result?.meta?.changes ?? 0); }
 export function isUniqueViolation(error) { return /unique|constraint/i.test(String(error?.message ?? error)); }
 
 /** 将 SQLite 的配额与账户触发器错误转换成可公开的稳定业务错误。 */
-export function quotaOrAccountError(error, code = "DAILY_QUOTA_EXCEEDED", message = "今日分析额度已用尽", status = 429) {
+export function quotaOrAccountError(error, code = "DAILY_QUOTA_EXCEEDED", message = "免费分析额度已用尽", status = 429) {
   if (error instanceof WorkerError) return error;
   const detail = String(error?.message ?? error);
   if (detail.includes("ACCOUNT_DISABLED")) return new WorkerError("ACCOUNT_DISABLED", "账户已禁用", 403);

@@ -48,6 +48,46 @@ test("Preview health 只有配置 Supabase server secret 才报告 storage 可�
   assert.equal((await withSecret.json()).dependencies.storage, true);
 });
 
+test("Pricing 目录在支付关闭时仍返回 Free、Flex 与 Pro", async () => {
+  const response = await routeRequest(new Request("https://example.test/api/v1/plans"), createEnv());
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.data.free_monthly.amount, 0);
+  assert.equal(payload.data.free_monthly.analysesPerMonth, 3);
+  assert.equal(payload.data.free_monthly.checkoutEnabled, true);
+  assert.equal(payload.data.flex_20.amount, 499);
+  assert.equal(payload.data.flex_20.minutes, 20);
+  assert.equal(payload.data.flex_20.validityDays, 90);
+  assert.equal(payload.data.flex_20.checkoutEnabled, false);
+  assert.equal(payload.data.pro_monthly.amount, 1199);
+  assert.equal(payload.data.pro_monthly.minutes, 60);
+  assert.equal(payload.data.pro_monthly.checkoutEnabled, false);
+});
+
+test("Billing balance 分开返回每月免费额度与付费权益", async () => {
+  const userSession = {
+    user_id: "usr_free", email_normalized: "free@example.test", role: "user", status: "active",
+    provider: "magic_link", provider_subject: null, retain_audio: 0, expires_at: "2099-01-01T00:00:00.000Z",
+  };
+  const database = {
+    prepare(sql) {
+      if (sql.includes("FROM sessions")) return { bind() { return { async first() { return userSession; } }; } };
+      if (sql.includes("FROM quota_counters")) return { bind() { return { async first() { return { value: 2 }; } }; } };
+      throw new Error(`unexpected SQL: ${sql}`);
+    },
+  };
+  const response = await routeRequest(new Request("https://example.test/api/v1/billing/balance", {
+    headers: { cookie: "so_session=test-session" },
+  }), { ...createEnv(), COOKIE_SECRET: "test-cookie-secret", DB: database });
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).data, {
+    currentPlan: "free_monthly",
+    freeQuota: { type: "monthly_analysis", limit: 3, used: 2, remaining: 1 },
+    entitlements: { minutes: 0, reports: 0 },
+    minutes: 0, reports: 0, paymentsEnabled: false,
+  });
+});
+
 test("health 对不支持的方法返回 JSON 405", async () => {
   const response = await routeRequest(
     new Request("https://example.test/health", { method: "POST" }),

@@ -56,8 +56,43 @@ export function PricingContent() {
   if (bootError) return <p className="empty-copy">Plans will load after the service connection is restored.</p>;
   if (loading) return <p className="empty-copy" aria-live="polite">Loading plans…</p>;
 
-  const sellablePlans = Object.entries(plans).filter(([, plan]) => plan.amount > 0);
-  return <><div className="pricing-grid">{sellablePlans.map(([code, plan], index) => <article className={index === 0 ? "plan-card is-featured" : "plan-card"} key={code}>{index === 0 && <span className="plan-label">Regular practice</span>}<h2>{productName(code)}</h2><strong>{money(plan.amount, plan.currency)}<small>{code.includes("monthly") ? "/month" : ""}</small></strong><p>{plan.minutes ? `${plan.minutes} analysis minutes` : `${plan.reports} deep report`}</p><ul><li><Check size={16} />Server-trusted price</li><li><Check size={16} />Secure order ownership</li><li><Check size={16} />Provider-confirmed status</li></ul><button className={index === 0 ? "button button-primary" : "button button-secondary"} disabled={Boolean(pendingProduct)} onClick={() => order(code)}>{pendingProduct === code ? "Creating order" : "Create order"}</button></article>)}</div>{checkout && <p className="dialog-message" role="status">Order created. <a href={checkout} target="_blank" rel="noreferrer">Continue to checkout</a>{providerMode === "mock" ? " (local development provider; no charge is made)." : "."}</p>}{error && <div role="alert"><p className="form-error">{error}</p>{Object.keys(plans).length === 0 && <button className="text-button" onClick={loadPlans}>Try again</button>}</div>}</>;
+  const planEntries = Object.entries(plans);
+  if (!planEntries.length) {
+    return <div className="empty-state"><CreditCard size={24} aria-hidden="true" /><h2>Plans could not be loaded</h2><p>The pricing catalog is temporarily unavailable.</p>{error && <button className="text-button" onClick={loadPlans}>Try again</button>}</div>;
+  }
+
+  return <>
+    <div className="pricing-grid">
+      {planEntries.map(([code, plan]) => {
+        const free = plan.purchaseType === "free";
+        const flex = plan.purchaseType === "one_time";
+        const pro = code === "pro_monthly";
+        const canCheckout = plan.checkoutEnabled !== false;
+        return <article className={pro ? "plan-card is-featured" : "plan-card"} key={code}>
+          <span className="plan-label">{free ? "Try it free" : pro ? "Most popular" : "One-time"}</span>
+          <h2>{productName(code)}</h2>
+          <strong>{free ? "Free" : money(plan.amount, plan.currency)}{pro && <small>/month</small>}</strong>
+          <p>{free
+            ? `${plan.analysesPerMonth ?? 3} full analyses per month`
+            : flex
+              ? `${plan.minutes ?? 20} analysis minutes · valid ${plan.validityDays ?? 90} days`
+              : `${plan.minutes ?? 60} analysis minutes per month`}</p>
+          <ul>
+            <li><Check size={16} />{free ? "Full analysis experience" : flex ? "No subscription required" : "Best value for regular practice"}</li>
+            <li><Check size={16} />{flex ? "Use it for an interview, presentation, or important conversation" : "Reports stay tied to your account"}</li>
+            <li><Check size={16} />{free ? "Upgrade only when you need more" : flex ? "Same core analysis, paid only when needed" : "Built for continuous improvement"}</li>
+          </ul>
+          {free
+            ? <span className="active-access"><Check size={16} />Active access</span>
+            : <button className={pro ? "button button-primary" : "button button-secondary"} disabled={Boolean(pendingProduct) || !canCheckout} onClick={() => order(code)}>{pendingProduct === code ? "Creating order" : canCheckout ? (flex ? "Buy Flex" : "Upgrade to Pro") : "Coming soon"}</button>}
+        </article>;
+      })}
+    </div>
+    {!plans.pro_monthly?.checkoutEnabled && <p className="dialog-message" role="status">Paid plans are visible now; checkout will activate after the payment backend migration is complete.</p>}
+    {checkout && <p className="dialog-message" role="status">Order created. <a href={checkout} target="_blank" rel="noreferrer">Continue to checkout</a>{providerMode === "mock" ? " (local development provider; no charge is made)." : "."}</p>}
+    {error && <p className="form-error" role="alert">{error}</p>}
+  </>;
+
 }
 
 /** 账单页仅在账户会话就绪后读取余额、订单、订阅和流水，避免匿名请求制造错误态。 */
@@ -107,7 +142,10 @@ export function BillingContent() {
   if (bootError) return <p className="empty-copy">Billing will load after the service connection is restored.</p>;
   if (!signedIn) return <div className="empty-state"><ShieldCheck size={24} aria-hidden="true" /><h2>Sign in to manage billing</h2><p>Your balance, orders, subscriptions, and ledger are available only to your account.</p></div>;
 
-  return <div className="settings-layout"><section className="settings-main" aria-busy={loading}><div className="balance-panel"><span><Clock3 size={22} />Minutes available</span><strong>{data.balance?.minutes ?? "--"}</strong><p>{data.balance?.reports ?? 0} report credits available.</p><div className="wide-meter"><span style={{ width: `${Math.min(Math.max(data.balance?.minutes ?? 0, 0), 100)}%` }} /></div></div><BillingLists data={data} pending={pending} mutate={mutate} />{loading && <p className="empty-copy" aria-live="polite">Refreshing billing data…</p>}{error && <div role="alert"><p className="form-error">{error}</p><button className="text-button" disabled={Boolean(pending)} onClick={load}>Try again</button></div>}</section><aside className="info-panel"><ShieldCheck size={22} /><h2>{providerMode === "mock" ? "Local development provider" : "Configured payment provider"}</h2><p>{providerMode === "mock" ? "Development orders use a local provider and do not charge a payment method." : "Checkout, cancellation, refund, and webhook status come from the configured provider."}</p><RefreshCw size={18} /></aside></div>;
+  const freeQuota = data.balance?.freeQuota;
+  const paymentsReady = data.balance?.paymentsEnabled === true;
+  return <div className="settings-layout"><section className="settings-main" aria-busy={loading}><div className="balance-panel"><span><Clock3 size={22} />Current plan</span><strong>Free</strong><p>{freeQuota ? `${freeQuota.remaining} of ${freeQuota.limit} free analyses left this month.` : "Loading this month’s free quota…"}</p>{freeQuota && <div className="wide-meter"><span style={{ width: `${Math.min(Math.max((freeQuota.remaining / Math.max(freeQuota.limit, 1)) * 100, 0), 100)}%` }} /></div>}</div><BillingLists data={data} pending={pending} mutate={mutate} />{loading && <p className="empty-copy" aria-live="polite">Refreshing billing data…</p>}{error && <div role="alert"><p className="form-error">{error}</p><button className="text-button" disabled={Boolean(pending)} onClick={load}>Try again</button></div>}</section><aside className="info-panel"><ShieldCheck size={22} /><h2>{providerMode === "mock" ? "Local development provider" : paymentsReady ? "Paid upgrades available" : "Free plan active"}</h2><p>{providerMode === "mock" ? "Development orders use a local provider and do not charge a payment method." : paymentsReady ? "Subscription and order status come from the configured payment provider." : "Your monthly free quota remains active while paid checkout is being migrated. Flex and Pro can still be compared before checkout opens."}</p><RefreshCw size={18} /></aside></div>;
+
 }
 
 function BillingLists({ data, mutate, pending }) {
@@ -115,5 +153,8 @@ function BillingLists({ data, mutate, pending }) {
 }
 
 function productName(code) {
+  if (code === "free_monthly") return "Free";
+  if (code === "flex_20") return "Flex";
+  if (code === "pro_monthly") return "Pro";
   return code.split("_").map((word) => word[0].toUpperCase() + word.slice(1)).join(" ");
 }

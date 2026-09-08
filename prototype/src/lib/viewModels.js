@@ -30,7 +30,7 @@ export function reportMetrics(report) {
   return [
     { label: "Speaking rate", value: metrics.wordsPerMinute, unit: "WPM", state: paceState(metrics.wordsPerMinute) },
     { label: "Filler words", value: metrics.fillers?.total ?? 0, unit: "total", state: `${metrics.fillers?.perMinute ?? 0} per min` },
-    { label: "Long pauses", value: metrics.longPauses?.length ?? 0, unit: "over 3s", state: "Review" },
+    { label: "Long pauses", value: metrics.longPauses?.length ?? 0, unit: "over 3s", state: metrics.longPauses?.length ? "Review" : "None detected" },
     { label: "Effective speech", value: formatDuration((metrics.effectiveSpeakingSeconds ?? 0) * 1000), unit: "spoken", state: `${metrics.wordCount ?? 0} words` },
   ];
 }

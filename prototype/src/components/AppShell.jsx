@@ -25,8 +25,9 @@ export function AppShell({ activePath, authOpen, children, navigate, onAuthChang
   const [signingOut, setSigningOut] = useState(false);
   const user = session?.user;
   const isCurrent = (path) => path === "/" ? activePath === "/" : activePath.startsWith(path);
-  const minutes = balance?.minutes;
-  const meterWidth = Number.isFinite(minutes) ? `${Math.min(Math.max(minutes, 0), 100)}%` : "0%";
+  const freeQuota = balance?.freeQuota;
+  const quotaLabel = freeQuota ? freeQuota.remaining + "/" + freeQuota.limit + " free analyses left this month" : "Loading free quota";
+  const meterWidth = freeQuota ? Math.min(Math.max((freeQuota.remaining / Math.max(freeQuota.limit, 1)) * 100, 0), 100) + "%" : "0%";
 
   useEffect(() => {
     let active = true;
@@ -81,9 +82,9 @@ export function AppShell({ activePath, authOpen, children, navigate, onAuthChang
           </div>
         </nav>
         <div className="account-cluster">
-          <button className="minute-meter" onClick={() => go("/settings/billing")} aria-label={user ? "View available minutes" : "Sign in to view minutes"}>
-            <span><Clock3 size={16} />{user ? (Number.isFinite(minutes) ? `${minutes} minutes available` : "Loading minutes") : "Sign in to save work"}</span>
-            {user && <span className="meter-track"><span style={{ width: meterWidth }} /></span>}
+          <button className="minute-meter" onClick={() => go("/settings/billing")} aria-label={user ? "View free quota and billing" : "Sign in to view your free quota"}>
+            <span><Clock3 size={16} />{user ? quotaLabel : "Sign in to save work"}</span>
+            {user && freeQuota && <span className="meter-track"><span style={{ width: meterWidth }} /></span>}
           </button>
           <button className="account-button" onClick={() => user ? setAccountOpen((open) => !open) : onAuthChange(true)} aria-expanded={user ? accountOpen : undefined} aria-haspopup={user ? "menu" : undefined}>
             <span className="avatar">{user ? initials(user.email) : <UserRound size={17} />}</span><span>{user ? user.email : "Sign in"}</span>
@@ -94,7 +95,7 @@ export function AppShell({ activePath, authOpen, children, navigate, onAuthChang
           </button>
         </div>
       </header>
-      {(bootError || balanceError) && <aside role="alert" className="form-error"><p>{bootError ? `Service connection failed: ${bootError}` : `Billing data could not load: ${balanceError}`}</p>{bootError && <button className="text-button" disabled={booting} onClick={() => retryBootstrap().catch(() => undefined)}>{booting ? "Retrying connection" : "Retry connection"}</button>}</aside>}
+      {(bootError || balanceError) && <aside role="alert" className="form-error shell-alert"><p>{bootError ? `Service connection failed: ${bootError}` : `Billing data could not load: ${balanceError}`}</p>{bootError && <button className="text-button" disabled={booting} onClick={() => retryBootstrap().catch(() => undefined)}>{booting ? "Retrying connection" : "Retry connection"}</button>}</aside>}
       <main>{children}</main>
       <footer className="site-footer">
         <span>Speak Confidently</span>

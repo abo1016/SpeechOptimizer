@@ -66,6 +66,27 @@ test("Preview 测试邮箱可免除账户与全局分析次数配额", async () 
   assert.deepEqual(quotaLimits, []);
 });
 
+test("登录账户免费额度按月计数，匿名与全局护栏继续按天", async () => {
+  const request = new Request("https://example.test/api/v1/analyses", { method: "POST",
+    headers: { "idempotency-key": "monthly-account-quota-key" } });
+  let quotaLimits;
+  const repository = {
+    async findIdempotentAnalysis() { return null; },
+    async createAnalysis(input) {
+      quotaLimits = input.quotaLimits;
+      return { analysis: { id: "ana_monthly", owner: input.owner, status: "created", attempt: 0 }, duplicate: false };
+    },
+  };
+  await createAnalysis(request, { retainAudio: false }, { type: "account", id: "usr_monthly" }, {
+    APP_ENV: "preview", ACCOUNT_MONTHLY_LIMIT: "3", GLOBAL_DAILY_LIMIT: "50",
+  }, repository, "monthly@example.com");
+  const today = new Date().toISOString().slice(0, 10);
+  assert.deepEqual(quotaLimits, [
+    { metric: "analysis-global", periodKey: today, limit: 50 },
+    { metric: "analysis-account:usr_monthly", periodKey: today.slice(0, 7), limit: 3 },
+  ]);
+});
+
 test("分析列表游标保留 created_at 与 id，避免同秒数据跨页遗漏", () => {
   const cursor = encodeAnalysisCursor({ createdAt: "2026-09-05T00:00:00.000Z", id: "ana_150" });
   assert.deepEqual(decodeAnalysisCursor(cursor), { createdAt: "2026-09-05T00:00:00.000Z", id: "ana_150" });

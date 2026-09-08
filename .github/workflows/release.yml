@@ -94,6 +94,7 @@ jobs:
             services/core-platform
             services/account-billing
             apps/mvp-server
+            apps/cloudflare-worker
           )
           for package_dir in "${packages[@]}"; do
             echo "[release] install ${package_dir}"

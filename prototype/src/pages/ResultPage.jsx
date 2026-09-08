@@ -1,8 +1,8 @@
-import { ArrowRight, CheckCircle2, Mic, Quote, RotateCcw } from "lucide-react";
+import { ArrowRight, CheckCircle2, Mic, Quote, RotateCcw, Target } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { resources } from "../api/resources.js";
 import { logEvent } from "../lib/logEvent.js";
-import { historyRow, reportFeedback, reportMetrics } from "../lib/viewModels.js";
+import { formatDuration, historyRow, reportFeedback, reportMetrics } from "../lib/viewModels.js";
 import { useApp } from "../state/AppProvider.jsx";
 
 function PriorityCard({ item, index }) {
@@ -20,6 +20,45 @@ function PriorityCard({ item, index }) {
       </div>
     </article>
   );
+}
+
+function reportValues(report) {
+  return report?.report?.metrics ?? report?.metrics ?? {};
+}
+
+function reportTranscript(report) {
+  return report?.report?.transcript ?? report?.transcript ?? null;
+}
+
+function measuredSignals(metrics) {
+  const pace = Number.isFinite(metrics.wordsPerMinute) ? metrics.wordsPerMinute : "--";
+  const fillerTotal = Number.isFinite(metrics.fillers?.total) ? metrics.fillers.total : "--";
+  const pauseTotal = Array.isArray(metrics.longPauses) ? metrics.longPauses.length : "--";
+  return [
+    { label: "Pace", value: pace === "--" ? pace : `${pace} WPM`, detail: pace === "--" ? "No pace reading" : pace >= 120 && pace <= 170 ? "Within target" : "Measured pace" },
+    { label: "Fillers", value: fillerTotal, detail: Number.isFinite(metrics.fillers?.perMinute) ? `${metrics.fillers.perMinute} per min` : "No rate reading" },
+    { label: "Long pauses", value: pauseTotal, detail: pauseTotal === "--" ? "No pause reading" : "over 3 seconds" },
+  ];
+}
+
+function evidenceEvents(metrics) {
+  const fillers = Array.isArray(metrics.fillers?.occurrences) ? metrics.fillers.occurrences.map((entry) => ({
+    atSeconds: entry.atSeconds,
+    label: `Filler “${entry.phrase}”`,
+    detail: "Detected filler word",
+  })) : [];
+  const pauses = Array.isArray(metrics.longPauses) ? metrics.longPauses.map((entry) => ({
+    atSeconds: entry.startSeconds,
+    label: `${entry.durationSeconds}s pause`,
+    detail: "Pause longer than 3 seconds",
+  })) : [];
+  return [...fillers, ...pauses].sort((left, right) => (left.atSeconds ?? 0) - (right.atSeconds ?? 0));
+}
+
+function formatTimestamp(seconds) {
+  if (!Number.isFinite(seconds)) return "--:--";
+  const whole = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
 }
 
 /** 报告页只渲染服务端生成的 metrics 和 feedback，不从静态演示数据补全内容。 */
@@ -62,7 +101,19 @@ export function ResultPage({ analysisId, navigate }) {
 
   const feedback = reportFeedback(report);
   const metrics = reportMetrics(report);
-  const firstEvidence = feedback[0];
+  const rawMetrics = reportValues(report);
+  const transcript = reportTranscript(report);
+  const signals = measuredSignals(rawMetrics);
+  const events = evidenceEvents(rawMetrics);
+  const timingEvidenceAvailable = Boolean(rawMetrics.fillers) && Array.isArray(rawMetrics.longPauses);
+  const takeaway = feedback.length
+    ? `${feedback.length} measured ${feedback.length === 1 ? "priority" : "priorities"} to work on.`
+    : "No corrective delivery priority was triggered.";
+  const takeawayDetail = feedback.length
+    ? "Start with the first item below, then record the same message again so the change is easier to compare."
+    : "The current checks did not flag pace, filler use, or long pauses for correction. Review the measurements below and repeat the take to test consistency.";
+  const nextTakeCue = feedback[0]?.rerecordPrompt ?? "Repeat the same message once and try to keep the measured delivery stable.";
+  const transcriptDuration = Number.isFinite(rawMetrics.totalDurationSeconds) ? formatDuration(rawMetrics.totalDurationSeconds * 1000) : "--";
 
   return (
     <div className="report-page page-container">
@@ -77,9 +128,27 @@ export function ResultPage({ analysisId, navigate }) {
         </div>
       </header>
 
+      <section className="report-overview" aria-labelledby="takeaway-title">
+        <article className="take-summary-card">
+          <p className="eyebrow">Measured takeaway</p>
+          <h2 id="takeaway-title">{takeaway}</h2>
+          <p>{takeawayDetail}</p>
+          <div className="summary-signals">
+            {signals.map((signal) => <div className="summary-signal" key={signal.label}><span>{signal.label}</span><strong>{signal.value}</strong><small>{signal.detail}</small></div>)}
+          </div>
+        </article>
+        <aside className="practice-brief">
+          <Target size={24} aria-hidden="true" />
+          <p className="eyebrow">Next take</p>
+          <h2>One focused practice cue</h2>
+          <p>{nextTakeCue}</p>
+          <small>For a cleaner comparison, keep the message itself as similar as you can.</small>
+        </aside>
+      </section>
+
       <section className="priority-section" aria-labelledby="priority-title">
         <div className="section-heading compact"><div><p className="eyebrow">Start here</p><h2 id="priority-title">Your priorities</h2></div><span className="complete-label"><CheckCircle2 size={17} />Measured feedback</span></div>
-        {feedback.length > 0 ? <div className="priority-grid">{feedback.map((item, index) => <PriorityCard item={item} index={index} key={`${item.issue}-${index}`} />)}</div> : <p className="empty-copy">This analysis did not produce additional practice priorities.</p>}
+        {feedback.length > 0 ? <div className="priority-grid">{feedback.map((item, index) => <PriorityCard item={item} index={index} key={`${item.issue}-${index}`} />)}</div> : <div className="priority-empty-card"><CheckCircle2 size={22} aria-hidden="true" /><div><strong>No correction crossed the current feedback thresholds.</strong><p>That result is still useful: the analyzer did not find a pace, filler, or long-pause issue that needs a corrective cue in this take.</p></div></div>}
       </section>
 
       <section className="metric-section" aria-labelledby="metrics-title">
@@ -87,7 +156,19 @@ export function ResultPage({ analysisId, navigate }) {
         {metrics.length > 0 ? <div className="metric-grid">{metrics.map((metric) => <article className="metric-card" key={metric.label}><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.unit}</small><em>{metric.state}</em></article>)}</div> : <p className="empty-copy">Measured metrics are unavailable for this report.</p>}
       </section>
 
-      {firstEvidence && <section className="evidence-strip" aria-label="First evidence item"><Quote size={23} aria-hidden="true" /><div><strong>Evidence from this take</strong><p>{firstEvidence.evidence}</p></div><span>{firstEvidence.priority} priority</span></section>}
+      <section className="report-evidence-section" aria-labelledby="evidence-title">
+        <div className="section-heading compact"><div><p className="eyebrow">Inspect the evidence</p><h2 id="evidence-title">Transcript & timing</h2></div><span className="evidence-meta">{rawMetrics.wordCount ?? "--"} words · {transcriptDuration}</span></div>
+        <div className="report-evidence-grid">
+          <article className="transcript-panel">
+            <div className="panel-title-row"><span><Quote size={19} aria-hidden="true" />Transcript</span><small>What the analyzer heard</small></div>
+            {transcript?.text ? <blockquote>{transcript.text}</blockquote> : <p className="empty-copy">Transcript text is unavailable for this report.</p>}
+          </article>
+          <article className="timing-panel">
+            <div className="panel-title-row"><span>Timestamp evidence</span><small>Fillers and pauses</small></div>
+            {events.length > 0 ? <div className="evidence-events">{events.slice(0, 8).map((event, index) => <div className="evidence-event" key={`${event.label}-${event.atSeconds}-${index}`}><time>{formatTimestamp(event.atSeconds)}</time><div><strong>{event.label}</strong><small>{event.detail}</small></div></div>)}</div> : timingEvidenceAvailable ? <div className="evidence-empty"><CheckCircle2 size={22} aria-hidden="true" /><div><strong>No timestamped issues to review.</strong><p>No filler occurrences or pauses over 3 seconds were detected in this take.</p></div></div> : <p className="empty-copy">Timestamp evidence is unavailable for this report.</p>}
+          </article>
+        </div>
+      </section>
 
       <section className="next-take-band">
         <div><p className="eyebrow">Close the loop</p><h2>Make one better take while the feedback is fresh.</h2></div>
